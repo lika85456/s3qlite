@@ -1,5 +1,5 @@
 {
-	"name": "s3qlite",
+	"name": "@lika85456/s3qlite",
 	"version": "0.1.0",
 	"type": "module",
 	"sideEffects": false,

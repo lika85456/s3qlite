@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import { stdin as input, stdout as output } from "node:process";
 import { createInterface } from "node:readline/promises";
 
@@ -81,6 +81,29 @@ const hasPendingChangeset = async (): Promise<boolean> => {
 	);
 };
 
+const getPackageInfo = async (): Promise<{ name: string; version: string }> => {
+	const packageJson = JSON.parse(
+		await readFile(new URL("../packages/s3qlite/package.json", import.meta.url), "utf8"),
+	) as { name: string; version: string };
+
+	return {
+		name: packageJson.name,
+		version: packageJson.version,
+	};
+};
+
+const isCurrentVersionPublished = async (): Promise<boolean> => {
+	const { name, version } = await getPackageInfo();
+	const result = spawnSync("npm", ["view", `${name}@${version}`, "version"], {
+		cwd: process.cwd(),
+		stdio: ["ignore", "pipe", "ignore"],
+		encoding: "utf8",
+		env: process.env,
+	});
+
+	return result.status === 0;
+};
+
 const ensureNpmAuth = async (): Promise<void> => {
 	while (true) {
 		const result = spawnSync("npm", ["whoami"], {
@@ -101,17 +124,40 @@ const ensureNpmAuth = async (): Promise<void> => {
 };
 
 const guide = async (): Promise<void> => {
-	console.log("Release guide for s3qlite");
+	const packageInfo = await getPackageInfo();
+	console.log(`Release guide for ${packageInfo.name}`);
 	console.log(`Branch: ${getOutput(["git", "branch", "--show-current"])}`);
-	console.log(
-		`Package version: ${getOutput(["bun", "pm", "pkg", "get", "version", "--cwd", "packages/s3qlite"])}`,
-	);
+	console.log(`Package version: ${packageInfo.version}`);
 
-	await waitForCleanGit(
-		"Git tree is dirty. Commit or stash your current work before starting a release.",
-	);
-
+	const currentVersionPublished = await isCurrentVersionPublished();
 	const pendingChangeset = await hasPendingChangeset();
+	const currentStatus = getOutput(["git", "status", "--porcelain"]);
+
+	if (!pendingChangeset && currentStatus.length === 0 && !currentVersionPublished) {
+		console.log("Release is already versioned and committed. Resuming publish only.");
+		await ensureNpmAuth();
+
+		const publishAnswer = (
+			await rl.question("Publish to npm now? Type `publish` to continue.\n> ")
+		).trim();
+		if (publishAnswer !== "publish") {
+			console.log("Publish cancelled.");
+			return;
+		}
+
+		run(["bun", "run", "build"]);
+		run(["bunx", "changeset", "publish"]);
+
+		const pushAnswer = (
+			await rl.question("Push commit and tags now? Type `push` to continue.\n> ")
+		).trim();
+		if (pushAnswer === "push") {
+			run(["git", "push", "--follow-tags"]);
+		}
+
+		console.log("Release flow finished.");
+		return;
+	}
 
 	if (!pendingChangeset) {
 		console.log("No pending changeset found. Starting interactive changeset prompt.");
@@ -121,24 +167,19 @@ const guide = async (): Promise<void> => {
 			console.log("No changeset file was created. Aborting.");
 			process.exit(1);
 		}
-
-		const planHead = getOutput(["git", "rev-parse", "HEAD"]);
-		await waitForCommit(
-			"Commit your release plan now. This commit should include your code changes and the new .changeset file.",
-			planHead,
-		);
 	} else {
 		console.log("Pending changeset found. Reusing it.");
 	}
-
-	await waitForCleanGit("Git tree must stay clean before versioning.");
 
 	run(["bunx", "changeset", "version"]);
 	run(["bun", "run", "test:ci"]);
 	run(["bun", "run", "build"]);
 
-	const versionHead = getOutput(["git", "rev-parse", "HEAD"]);
-	await waitForCommit("Commit the version bump and changelog now.", versionHead);
+	const releaseHead = getOutput(["git", "rev-parse", "HEAD"]);
+	await waitForCommit(
+		"Commit the full release now. This single commit should include your code, changelog, and version bump.",
+		releaseHead,
+	);
 
 	await waitForCleanGit("Git tree must stay clean before publishing.");
 	await ensureNpmAuth();
