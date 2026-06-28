@@ -116,6 +116,20 @@ Pulls changes from remote and applies them to the local database without pushing
 
 Uploads local changes to the remote. If the remote has any changes that are not present locally (the local database is not pulled to the latest remote state), this operation will fail - this might also happen when other instances push their changes between your pull & push operations - use sync to not worry about this.
 
+Push fails with typed errors in the Effect API:
+
+- `ConflictError` when the remote changed during push and the CAS update is rejected.
+
+## .fork(name: string): Promise<void>
+
+Creates a new database name that starts from the current remote of the source database. This copies only the metadata, so the fork reuses the same referenced snapshot and batch objects already stored in S3. After the fork, both databases can diverge independently.
+
+Fork fails with typed errors in the Effect API:
+
+- `SameNameError` when the target name matches the source database name.
+- `AlreadyExistsError` when the target database already exists.
+- `SourceDoesNotExistError` when the source database does not exist remotely.
+
 # How does it work?
 
 S3Qlite uses Turso CDC to store locally created changes. During sync these changes are batched and synced to/from the provided S3 bucket and applied, so multiple instances can do work at the same time on the same database with minimal S3 requests and minimal transfered data. Thanks to this approach a point in-time state of the database can be reconstructed as well as easily forking the database without additional overhead.
@@ -123,4 +137,4 @@ S3Qlite uses Turso CDC to store locally created changes. During sync these chang
 # Limitations
 
 - Due to the last push wins strategy, a unwanted "corruption" of data might occur. Have in mind that the synchronization is just application of CDC rows - if two instances update the same row, the last pushed edit wins. Try to avoid autoincrement and prefer other databases for more transactional workloads. S3Qlite however does support fully transactional model - sync before & after every operation.
-- Currently fork or checkpointing is not implemented, it is planned for future.
+- Checkpointing is not implemented yet.
