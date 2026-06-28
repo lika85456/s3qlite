@@ -1,5 +1,11 @@
 # s3qlite
 
+## 0.1.1
+
+### Patch Changes
+
+- better tag names
+
 ## 0.1.0
 
 ### Minor Changes
