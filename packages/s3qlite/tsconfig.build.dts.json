@@ -1,0 +1,10 @@
+{
+	"extends": "./tsconfig.build.base.json",
+	"compilerOptions": {
+		"outDir": "./dist/dts",
+		"declaration": true,
+		"emitDeclarationOnly": true,
+		"sourceMap": false,
+		"inlineSources": false
+	}
+}

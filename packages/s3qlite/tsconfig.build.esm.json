@@ -1,0 +1,7 @@
+{
+	"extends": "./tsconfig.build.base.json",
+	"compilerOptions": {
+		"outDir": "./dist/esm",
+		"module": "ESNext"
+	}
+}

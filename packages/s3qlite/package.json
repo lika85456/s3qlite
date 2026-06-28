@@ -1,20 +1,27 @@
 {
-	"name": "@template/s3qlite",
+	"name": "s3qlite",
 	"version": "0.0.1",
-	"private": true,
 	"type": "module",
+	"sideEffects": false,
 	"exports": {
+		"./package.json": "./package.json",
 		".": "./index.ts",
 		"./effect": "./effect.ts"
 	},
+	"publishConfig": {
+		"access": "public",
+		"directory": "dist",
+		"linkDirectory": false
+	},
 	"scripts": {
+		"build": "rm -rf dist && tsc -p tsconfig.build.esm.json && tsc -p tsconfig.build.cjs.json && tsc -p tsconfig.build.dts.json && bun scripts/prepare-dist.ts",
 		"lint": "oxlint .",
 		"format": "oxfmt .",
-	"test": "vitest",
-	"test:ci": "vitest run --coverage --silent",
-	"test:integration": "vitest --project integration",
-	"test:fuzzy": "vitest --project fuzzy",
-	"check-types": "tsgo --noEmit"
+		"test": "vitest",
+		"test:ci": "vitest run --coverage --silent",
+		"test:integration": "vitest --project integration",
+		"test:fuzzy": "vitest --project fuzzy",
+		"check-types": "tsgo --noEmit"
 	},
 	"dependencies": {
 		"@effect-aws/client-s3": "^1.11.0",

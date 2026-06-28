@@ -42,12 +42,14 @@ export const connect = async (
 	{ s3, ...connectionOptions }: PromiseConnectionOptions,
 ): Promise<PromiseS3qliteDatabase> =>
 	Effect.runPromise(
-		connectEffect(dbName, connectionOptions).pipe(
-			Effect.provide(fileSystemLayer),
-			Effect.provide(pathLayer),
-			Effect.provide(S3.layer(s3 ?? {})),
-			Effect.map(toPromiseDatabase),
+		Effect.scoped(
+			connectEffect(dbName, connectionOptions).pipe(
+				Effect.provide(fileSystemLayer),
+				Effect.provide(pathLayer),
+				Effect.provide(S3.layer(s3 ?? {})),
+				Effect.map(toPromiseDatabase),
+			),
 		),
 	);
 
-export * from "./src/index.ts";
+export * from "./src/index.js";
