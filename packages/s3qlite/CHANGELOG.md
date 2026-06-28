@@ -1,5 +1,11 @@
 # s3qlite
 
+## 0.2.2
+
+### Patch Changes
+
+- Exports, S3 error typed, docs
+
 ## 0.2.1
 
 ### Patch Changes
