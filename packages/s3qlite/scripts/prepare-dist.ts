@@ -1,4 +1,4 @@
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -104,5 +104,9 @@ await mkdir(new URL("../dist/cjs/", import.meta.url), { recursive: true });
 await writeFile(
 	new URL("../dist/cjs/package.json", import.meta.url),
 	'{\n\t"type": "commonjs"\n}\n',
+);
+await copyFile(
+	new URL("../../../README.md", import.meta.url),
+	new URL("../dist/README.md", import.meta.url),
 );
 await writeFile(new URL("../dist/package.json", import.meta.url), `${distPackageJsonText}\n`);

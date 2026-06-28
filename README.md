@@ -4,4 +4,4 @@ Fast in-process SQLite database powered by [Turso](https://turso.tech/) synced t
 
 # Installation
 
-`bun add s3qlite`
+`bun add @lika85456/s3qlite`
