@@ -1,5 +1,15 @@
 # s3qlite
 
+## 0.2.1
+
+### Patch Changes
+
+- Added license.
+
+  Added fork to README.
+
+  Added typed error for push to README.
+
 ## 0.2.0
 
 ### Minor Changes
