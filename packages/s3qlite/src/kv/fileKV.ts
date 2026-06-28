@@ -22,6 +22,7 @@ export const makeFileKV = (
 ): Effect.Effect<KV & CloneTrait & ConnectDatabaseTrait, never, FileSystem | Scope.Scope> =>
 	Effect.gen(function* () {
 		const fs = yield* FileSystem;
+		yield* fs.makeDirectory(rootDirectory, { recursive: true }).pipe(Effect.orDie);
 
 		const writeBytes = (key: string, value: Uint8Array): Effect.Effect<{ etag: string }> =>
 			Effect.gen(function* () {

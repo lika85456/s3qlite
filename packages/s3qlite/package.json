@@ -5,10 +5,25 @@
 	"repository": "github:lika85456/s3qlite",
 	"type": "module",
 	"sideEffects": false,
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"main": "./dist/cjs/index.js",
+	"module": "./dist/esm/index.js",
+	"types": "./dist/dts/index.d.ts",
 	"exports": {
 		"./package.json": "./package.json",
-		".": "./index.ts",
-		"./effect": "./effect.ts"
+		".": {
+			"types": "./dist/dts/index.d.ts",
+			"import": "./dist/esm/index.js",
+			"default": "./dist/cjs/index.js"
+		},
+		"./effect": {
+			"types": "./dist/dts/effect.d.ts",
+			"import": "./dist/esm/effect.js",
+			"default": "./dist/cjs/effect.js"
+		}
 	},
 	"publishConfig": {
 		"access": "public",
@@ -27,7 +42,7 @@
 	},
 	"dependencies": {
 		"@effect-aws/client-s3": "^1.11.0",
-		"@effect/platform": "0.96.0",
+		"@effect/platform": "^0.96.0",
 		"@effect/platform-bun": "^0.89.0",
 		"@effect/platform-node": "^0.106.0",
 		"@tursodatabase/database": "^0.6.0",

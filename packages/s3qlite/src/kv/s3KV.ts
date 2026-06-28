@@ -1,61 +1,61 @@
 import { S3 } from "@effect-aws/client-s3";
-import type { S3Service } from "@effect-aws/client-s3";
-import { Chunk, Effect, Option, Stream } from "effect";
+import { Chunk, Data, Effect, Option, Stream } from "effect";
 
 import { ConflictError } from "./kv";
 import type { KV } from "./kv";
 
-const isMissingObjectError = (error: unknown): boolean =>
-	Effect.runSync(
-		Effect.sync(() => {
-			if (typeof error !== "object") {
-				return false;
-			}
+export class BucketDoesNotExistError extends Data.TaggedError("BucketDoesNotExistError")<{
+	readonly bucket: string;
+	readonly message: string;
+}> {}
 
-			const errorOption = Option.fromNullable(error);
-			if (Option.isNone(errorOption)) {
-				return false;
-			}
+const isNotModifiedError = (error: unknown): boolean => {
+	if (typeof error !== "object") {
+		return false;
+	}
 
-			const currentError = errorOption.value as { Code?: unknown; name?: unknown };
-			return (
-				(typeof currentError.Code === "string" && currentError.Code === "NoSuchKey") ||
-				(typeof currentError.name === "string" &&
-					(currentError.name === "NoSuchKey" || currentError.name === "NotFound"))
-			);
-		}),
-	);
+	const errorOption = Option.fromNullable(error);
+	if (Option.isNone(errorOption)) {
+		return false;
+	}
 
-const isNotModifiedError = (error: unknown): boolean =>
-	Effect.runSync(
-		Effect.sync(() => {
-			if (typeof error !== "object") {
-				return false;
-			}
+	const currentError = errorOption.value as {
+		Code?: unknown;
+		name?: unknown;
+		$metadata?: unknown;
+	};
 
-			const errorOption = Option.fromNullable(error);
-			if (Option.isNone(errorOption)) {
-				return false;
-			}
+	if (currentError.Code === "NotModified" || currentError.name === "NotModified") {
+		return true;
+	}
 
-			const currentError = errorOption.value as {
-				Code?: unknown;
-				name?: unknown;
-				$metadata?: unknown;
-			};
-			const metadata =
-				typeof currentError.$metadata === "object" &&
-				Option.isSome(Option.fromNullable(currentError.$metadata))
-					? Option.some(currentError.$metadata as { httpStatusCode?: number })
-					: Option.none<{ httpStatusCode?: number }>();
+	if (typeof currentError.$metadata !== "object") {
+		return false;
+	}
 
-			return (
-				(typeof currentError.Code === "string" && currentError.Code === "NotModified") ||
-				(typeof currentError.name === "string" && currentError.name === "NotModified") ||
-				Option.exists(metadata, (currentMetadata) => currentMetadata.httpStatusCode === 304)
-			);
-		}),
-	);
+	const metadataOption = Option.fromNullable(currentError.$metadata);
+	if (Option.isNone(metadataOption)) {
+		return false;
+	}
+
+	return (metadataOption.value as { httpStatusCode?: number }).httpStatusCode === 304;
+};
+
+const isMissingObjectError = (error: unknown): boolean => {
+	if (typeof error !== "object") {
+		return false;
+	}
+
+	const errorOption = Option.fromNullable(error);
+	if (Option.isNone(errorOption)) {
+		return false;
+	}
+
+	const currentError = errorOption.value as { Code?: unknown; name?: unknown };
+	return currentError.name === "NoSuchKey" || currentError.name === "NotFound"
+		? true
+		: currentError.Code === "NoSuchKey";
+};
 
 const getEtag = (result: { ETag?: string }, key: string): Effect.Effect<{ etag: string }> =>
 	Option.fromNullable(result.ETag).pipe(
@@ -150,9 +150,20 @@ const combineChunks = (chunks: readonly Uint8Array[], totalLength: number): Uint
 	return combined;
 };
 
-export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
+export const makeS3KV = (bucket: string) =>
 	Effect.gen(function* () {
 		const s3 = yield* S3;
+
+		yield* s3.headBucket({ Bucket: bucket }).pipe(
+			Effect.catchTag("NotFound", () =>
+				Effect.fail(
+					new BucketDoesNotExistError({
+						bucket,
+						message: `Bucket "${bucket}" does not exist`,
+					}),
+				),
+			),
+		);
 
 		return {
 			get: (key) =>
@@ -171,7 +182,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 						return yield* Effect.die(
 							response.left instanceof Error
 								? response.left
-								: new Error(`Failed to read ${key}: ${String(response.left)}`),
+								: new Error(
+										`Failed to read ${key}: ${typeof response.left === "object" ? JSON.stringify(response.left) : String(response.left)}`,
+									),
 						);
 					}
 
@@ -199,7 +212,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 						return yield* Effect.die(
 							response.left instanceof Error
 								? response.left
-								: new Error(`Failed to read ${key}: ${String(response.left)}`),
+								: new Error(
+										`Failed to read ${key}: ${typeof response.left === "object" ? JSON.stringify(response.left) : String(response.left)}`,
+									),
 						);
 					}
 
@@ -224,7 +239,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 						return yield* Effect.die(
 							response.left instanceof Error
 								? response.left
-								: new Error(`Failed to stat ${key}: ${String(response.left)}`),
+								: new Error(
+										`Failed to stat ${key}: ${typeof response.left === "object" ? JSON.stringify(response.left) : String(response.left)}`,
+									),
 						);
 					}
 
@@ -237,7 +254,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 					Effect.orDieWith((error) =>
 						error instanceof Error
 							? error
-							: new Error(`Failed to write ${key}: ${String(error)}`),
+							: new Error(
+									`Failed to write ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
+								),
 					),
 					Effect.flatMap((result) => getEtag(result, key)),
 					Effect.tap((result) => Effect.logDebug(`s3KV.set(${key}) => ${result.etag}`)),
@@ -284,7 +303,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 							: Effect.die(
 									error instanceof Error
 										? error
-										: new Error(`Failed to write ${key}: ${String(error)}`),
+										: new Error(
+												`Failed to write ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
+											),
 								);
 					}),
 					Effect.flatMap((result) => getEtag(result, key)),
@@ -297,7 +318,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 					Effect.orDieWith((error) =>
 						error instanceof Error
 							? error
-							: new Error(`Failed to delete ${key}: ${String(error)}`),
+							: new Error(
+									`Failed to delete ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
+								),
 					),
 					Effect.tap(() => Effect.logDebug(`s3KV.delete(${key}) => void`)),
 				),
@@ -317,7 +340,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 						return yield* Effect.die(
 							response.left instanceof Error
 								? response.left
-								: new Error(`Failed to stream ${key}: ${String(response.left)}`),
+								: new Error(
+										`Failed to stream ${key}: ${typeof response.left === "object" ? JSON.stringify(response.left) : String(response.left)}`,
+									),
 						);
 					}
 
@@ -335,7 +360,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 							Effect.orDieWith((error) =>
 								error instanceof Error
 									? error
-									: new Error(`Failed to start upload ${key}: ${String(error)}`),
+									: new Error(
+											`Failed to start upload ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
+										),
 							),
 						);
 					const uploadIdOption = Option.fromNullable(multipartUpload.UploadId);
@@ -378,7 +405,7 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 											error instanceof Error
 												? error
 												: new Error(
-														`Failed to upload ${key} part ${partNumber}: ${String(error)}`,
+														`Failed to upload part ${String(partNumber)} for ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
 													),
 										),
 										Effect.flatMap((result) =>
@@ -447,7 +474,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 								Effect.orDieWith((error) =>
 									error instanceof Error
 										? error
-										: new Error(`Failed to upload ${key}: ${String(error)}`),
+										: new Error(
+												`Failed to upload ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
+											),
 								),
 							);
 
@@ -469,7 +498,9 @@ export const makeS3KV = (bucket: string): Effect.Effect<KV, never, S3Service> =>
 							Effect.orDieWith((error) =>
 								error instanceof Error
 									? error
-									: new Error(`Failed to upload ${key}: ${String(error)}`),
+									: new Error(
+											`Failed to upload ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
+										),
 							),
 						);
 

@@ -49,39 +49,43 @@ await db.close();
 
 ```ts
 import { connect } from "@lika85456/s3qlite/effect";
-import { Effect } from "effect";
+import { S3 } from "@effect-aws/client-s3";
+import { layer as fileSystemLayer } from "@effect/platform-node/NodeFileSystem";
+import { Effect, Layer, ManagedRuntime } from "effect";
 
-const program = Effect.gen(function* () {
-	const db = yield* connect("user-123", {
-		bucket: "s3qlite",
-		localDirectory: "./.s3qlite",
-	});
+const program = Effect.scoped(
+	Effect.gen(function* () {
+		const db = yield* connect("user-123", {
+			bucket: "s3qlite",
+			localDirectory: "./.s3qlite",
+		});
 
-	yield* Effect.tryPromise(() =>
-		db.exec(`
-			CREATE TABLE IF NOT EXISTS users (
-				id TEXT PRIMARY KEY,
-				name TEXT NOT NULL
-			)
-		`),
-	);
+		yield* Effect.tryPromise(() =>
+			db.exec(`
+				CREATE TABLE IF NOT EXISTS users (
+					id TEXT PRIMARY KEY,
+					name TEXT NOT NULL
+				)
+			`),
+		);
 
-	yield* Effect.tryPromise(() =>
-		db.run("INSERT INTO users (id, name) VALUES (?, ?)", "1", "alice"),
-	);
+		yield* Effect.tryPromise(() =>
+			db.run("INSERT INTO users (id, name) VALUES (?, ?)", "1", "alice"),
+		);
 
-	yield* db.sync();
+		yield* db.sync();
 
-	const users = yield* Effect.tryPromise(
-		() => db.all("SELECT * FROM users ORDER BY id") as Promise<unknown[]>,
-	);
+		const users = yield* Effect.tryPromise(
+			() => db.all("SELECT * FROM users ORDER BY id") as Promise<unknown[]>,
+		);
 
-	console.log(users);
+		console.log(users);
+	}),
+);
 
-	yield* Effect.tryPromise(() => db.close());
-});
+const runtime = ManagedRuntime.make(Layer.mergeAll(fileSystemLayer, S3.layer({})));
 
-await Effect.runPromise(program);
+await runtime.runPromise(program);
 ```
 
 ## Explicit S3 Config
