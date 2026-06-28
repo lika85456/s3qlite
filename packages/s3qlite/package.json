@@ -1,6 +1,7 @@
 {
 	"name": "@lika85456/s3qlite",
 	"version": "0.2.0",
+	"license": "MIT",
 	"repository": "github:lika85456/s3qlite",
 	"type": "module",
 	"sideEffects": false,

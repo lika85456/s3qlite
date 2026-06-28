@@ -1,6 +1,7 @@
 {
 	"name": "s3qlite",
 	"private": true,
+	"license": "MIT",
 	"workspaces": ["apps/*", "packages/*"],
 	"type": "module",
 	"scripts": {
