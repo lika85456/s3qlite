@@ -76,6 +76,7 @@ const actionArb: fc.Arbitrary<Action> = fc.oneof(
 const schemaSql =
 	"CREATE TABLE items (id TEXT PRIMARY KEY, value TEXT NOT NULL, version INTEGER NOT NULL)";
 
+// oxlint-disable-next-line local-rules/function-minimum-length
 const readRows = async (db: Database): Promise<unknown[]> => {
 	const rows = await db.all("SELECT id, value, version FROM items ORDER BY id");
 	return rows as unknown[];

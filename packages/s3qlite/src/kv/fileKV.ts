@@ -200,7 +200,7 @@ export const makeFileKV = (
 							(db) => Effect.promise(() => db.close()),
 						),
 					),
-					Effect.tap((result) => Effect.logDebug(`fileKV.connect(${key}) => database`)),
+					Effect.tap(() => Effect.logDebug(`fileKV.connect(${key}) => database`)),
 				),
 		};
 	});

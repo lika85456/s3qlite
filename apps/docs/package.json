@@ -2,9 +2,5 @@
 	"name": "docs",
 	"private": true,
 	"type": "module",
-	"scripts": {
-		"lint": "oxlint .",
-		"format": "oxfmt .",
-		"check-types": "tsgo --noEmit"
-	}
+	"scripts": {}
 }

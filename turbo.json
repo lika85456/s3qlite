@@ -39,19 +39,14 @@
 		"build": {
 			"dependsOn": ["^lint", "^check-types"],
 			"outputs": ["dist/**"],
-			"inputs": [
-				"src/**",
-				"tsconfig*.json",
-				"package.json",
-				"bun.lock"
-			]
+			"inputs": ["src/**", "tsconfig*.json", "package.json", "bun.lock"]
 		},
 		"test": {
 			"persistent": true,
 			"cache": false
 		},
 		"test:ci": {
-			"dependsOn": ["^lint", "^check-types"],
+			"dependsOn": ["lint", "check-types"],
 			"outputs": ["coverage/**"],
 			"inputs": [
 				"src/**",
