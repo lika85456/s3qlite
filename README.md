@@ -1,4 +1,6 @@
-<img src="./apps/docs/public/s3qlite_logo.png" width="400" alt="S3Qlite" />
+<div align="center">
+	<img src="./apps/docs/public/s3qlite_logo.png" width="400" alt="S3Qlite" />
+</div>
 
 In-process SQL database with sub-millisecond latency persisted on S3 for durability and easy distribution.
 
