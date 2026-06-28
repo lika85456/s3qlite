@@ -145,6 +145,9 @@ rustfs("fork", (it) => {
 					expect(result.left).toBeInstanceOf(SameNameError);
 					expect(result.left._tag).toBe("SameNameError");
 					expect(result.left.dbName).toBe(dbName);
+					expect(result.left.message).toBe(
+						`Cannot fork database "${dbName}" into itself`,
+					);
 				}
 			}).pipe(Effect.provide(fileSystemLayer)),
 		),
@@ -187,6 +190,7 @@ rustfs("fork", (it) => {
 					expect(result.left).toBeInstanceOf(AlreadyExistsError);
 					expect(result.left._tag).toBe("AlreadyExistsError");
 					expect(result.left.dbName).toBe(targetDbName);
+					expect(result.left.message).toBe(`Database "${targetDbName}" already exists`);
 				}
 			}).pipe(Effect.provide(fileSystemLayer)),
 		),
@@ -217,6 +221,7 @@ rustfs("fork", (it) => {
 					expect(result.left).toBeInstanceOf(SourceDoesNotExistError);
 					expect(result.left._tag).toBe("SourceDoesNotExistError");
 					expect(result.left.dbName).toBe(dbName);
+					expect(result.left.message).toBe(`Source database "${dbName}" does not exist`);
 				}
 			}).pipe(Effect.provide(fileSystemLayer)),
 		),
