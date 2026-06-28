@@ -4,6 +4,7 @@ import { extractBatch } from "./batches";
 import { getLatestChangeId } from "./cdc/extract";
 import { truncate } from "./cdc/truncate";
 import { ConnectionConfig, ConnectionState } from "./contexts";
+import type { ConflictError } from "./kv/kv";
 import { pushFiles } from "./kv/syncFiles";
 import {
 	LocalKV,
@@ -17,7 +18,11 @@ import {
 } from "./storage";
 import type { Batch, Head, StoredHead } from "./types";
 
-export const push = () =>
+export const push = (): Effect.Effect<
+	void,
+	ConflictError,
+	ConnectionConfig | ConnectionState | LocalKV | RemoteKV
+> =>
 	Effect.gen(function* () {
 		const localKV = yield* LocalKV;
 		const remoteKV = yield* RemoteKV;

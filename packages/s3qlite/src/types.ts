@@ -1,6 +1,8 @@
 import type { Database } from "@tursodatabase/database";
 import type { Effect } from "effect";
 
+import type { ConflictError } from "./kv/kv";
+
 export type Snapshot = {
 	id: string;
 
@@ -69,8 +71,8 @@ export type ConnectionOptions = {
 
 export type S3qliteDatabase = Database & {
 	pull: () => Effect.Effect<void, Error>;
-	push: () => Effect.Effect<void, Error>;
-	sync: () => Effect.Effect<void, Error>;
+	push: () => Effect.Effect<void, ConflictError>;
+	sync: () => Effect.Effect<void, Error | ConflictError>;
 	fork: (dbName: string) => Effect.Effect<void, Error>;
 	checkpoint: () => Effect.Effect<void, Error>;
 };

@@ -112,10 +112,26 @@ export const wrapDatabase = <T extends object>(
 
 			if (asyncDatabaseMethods.has(property)) {
 				return (...args: unknown[]) =>
-					wrap(() => Reflect.apply(value, getTarget(), args), property, args);
+					wrap(
+						() => {
+							const target = getTarget();
+							const current = Reflect.get(target, property, target) as (
+								...args: readonly unknown[]
+							) => unknown;
+							return Reflect.apply(current, target, args);
+						},
+						property,
+						args,
+					);
 			}
 
-			return (...args: unknown[]) => Reflect.apply(value, getTarget(), args);
+			return (...args: unknown[]) => {
+				const target = getTarget();
+				const current = Reflect.get(target, property, target) as (
+					...args: readonly unknown[]
+				) => unknown;
+				return Reflect.apply(current, target, args);
+			};
 		},
 	});
 };

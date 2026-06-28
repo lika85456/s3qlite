@@ -1,4 +1,4 @@
-import { Context, Effect, Option, Ref } from "effect";
+import { Context, Effect, Option, Ref, Schedule } from "effect";
 
 import { applyBatch } from "./batches";
 import { getLatestChangeId } from "./cdc/extract";
@@ -169,19 +169,37 @@ export const connect = (dbName: string, options: ConnectionOptions) =>
 			Context.add(RemoteKV, remote),
 		);
 
+		const mutex = yield* Effect.makeSemaphore(1);
+
 		const wrapper = wrapDatabase(
 			() => currentConnection,
-			(call) => call(),
+			(call, method) => {
+				if (method === "iterate" || method === "transaction") {
+					return call();
+				}
+
+				return Effect.runPromise(
+					mutex.withPermits(1)(
+						Effect.promise(() =>
+							Promise.resolve().then(call as () => Promise<unknown>),
+						),
+					),
+				) as never;
+			},
 		) as unknown as S3qliteDatabase;
 
 		wrapper.pull = (() =>
-			pull().pipe(Effect.provide(ctx), Effect.asVoid)) as typeof wrapper.pull;
-		wrapper.push = () => push().pipe(Effect.provide(ctx), Effect.asVoid);
+			mutex.withPermits(1)(
+				pull().pipe(Effect.provide(ctx), Effect.asVoid),
+			)) as typeof wrapper.pull;
+		wrapper.push = () => mutex.withPermits(1)(push().pipe(Effect.provide(ctx), Effect.asVoid));
 		wrapper.sync = (() =>
-			Effect.gen(function* () {
-				yield* pull();
-				yield* push();
-			}).pipe(Effect.provide(ctx))) as typeof wrapper.sync;
+			mutex.withPermits(1)(
+				Effect.gen(function* () {
+					yield* pull();
+					yield* push();
+				}).pipe(Effect.retry(Schedule.recurs(2)), Effect.provide(ctx)),
+			)) as typeof wrapper.sync;
 		wrapper.fork = () => Effect.die(new Error("Not implemented"));
 		wrapper.checkpoint = () => Effect.die(new Error("Not implemented"));
 
