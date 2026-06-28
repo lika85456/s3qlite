@@ -56,6 +56,14 @@
 				"package.json",
 				"bun.lock"
 			]
+		},
+		"test:integration": {
+			"persistent": true,
+			"cache": false
+		},
+		"test:fuzzy": {
+			"persistent": true,
+			"cache": false
 		}
 	}
 }

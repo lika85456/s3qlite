@@ -7,9 +7,11 @@
 		"lint": "turbo lint",
 		"format": "turbo format",
 		"check-types": "turbo check-types",
-		"test": "turbo test",
-		"test:ci": "turbo test:ci",
-		"build": "turbo build"
+	"test": "turbo test",
+	"test:ci": "turbo test:ci",
+	"test:integration": "turbo test:integration",
+	"test:fuzzy": "turbo test:fuzzy",
+	"build": "turbo build"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",

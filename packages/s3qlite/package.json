@@ -10,9 +10,11 @@
 	"scripts": {
 		"lint": "oxlint .",
 		"format": "oxfmt .",
-		"test": "vitest",
-		"test:ci": "vitest run",
-		"check-types": "tsgo --noEmit"
+	"test": "vitest",
+	"test:ci": "vitest run --coverage --silent",
+	"test:integration": "vitest --project integration",
+	"test:fuzzy": "vitest --project fuzzy",
+	"check-types": "tsgo --noEmit"
 	},
 	"dependencies": {
 		"@effect-aws/client-s3": "^1.11.0",

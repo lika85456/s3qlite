@@ -8,7 +8,9 @@
 ## Testing
 
 - `bun test` - Run all tests in watch mode
-- `bun test:ci` - Run all tests with coverage (no watch)
+- `bun test:ci` - Run all tests with coverage and silent (no watch)
+- `bun test:integration` - Run integration tests in watch mode
+- `bun test:fuzzy` - Run fuzzy/property-based tests in watch mode
 
 ## Linting/Formatting
 

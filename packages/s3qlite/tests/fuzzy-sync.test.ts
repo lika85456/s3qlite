@@ -251,7 +251,7 @@ describe("s3qlite fuzzy sync", () => {
 					);
 				},
 			),
-			{ numRuns: 20 },
+			{ numRuns: 100 },
 		);
 	});
 });
