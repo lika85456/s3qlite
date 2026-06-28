@@ -1,0 +1,66 @@
+{
+	"$schema": "https://turborepo.dev/schema.json",
+	"tasks": {
+		"check-types": {
+			"dependsOn": ["^check-types"],
+			"inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json", "bun.lock"],
+			"outputs": []
+		},
+		"lint": {
+			"dependsOn": ["^lint"],
+			"inputs": [
+				"src/**",
+				"tests/**",
+				"package.json",
+				"*.js",
+				"*.ts",
+				"*.tsx",
+				"tsconfig*.json",
+				".oxlintrc.json",
+				"bun.lock"
+			],
+			"outputs": []
+		},
+		"format": {
+			"dependsOn": ["^format"],
+			"inputs": [
+				"src/**",
+				"tests/**",
+				"package.json",
+				"*.js",
+				"*.ts",
+				"*.tsx",
+				"tsconfig*.json",
+				".oxfmtrc.json",
+				"bun.lock"
+			],
+			"outputs": []
+		},
+		"build": {
+			"dependsOn": ["^lint", "^check-types"],
+			"outputs": ["dist/**"],
+			"inputs": [
+				"src/**",
+				"tsconfig*.json",
+				"package.json",
+				"bun.lock"
+			]
+		},
+		"test": {
+			"persistent": true,
+			"cache": false
+		},
+		"test:ci": {
+			"dependsOn": ["^lint", "^check-types"],
+			"outputs": ["coverage/**"],
+			"inputs": [
+				"src/**",
+				"tests/**",
+				"tsconfig*.json",
+				"vitest.config.*",
+				"package.json",
+				"bun.lock"
+			]
+		}
+	}
+}

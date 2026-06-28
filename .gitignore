@@ -1,0 +1,14 @@
+node_modules
+dist
+*.tgz
+coverage
+*.lcov
+.env
+.env.*.local
+.eslintcache
+.cache
+*.tsbuildinfo
+.idea
+.DS_Store
+.turbo
+.direnv
