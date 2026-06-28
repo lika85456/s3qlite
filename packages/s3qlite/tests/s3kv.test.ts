@@ -15,11 +15,11 @@ rustfs("s3 kv", (it) => {
 			const s3 = yield* S3;
 			const { makeBucketName } = yield* Rustfs;
 			const bucket = makeBucketName("s3kv");
-			const kv = yield* makeS3KV(bucket);
 			const expectedText = "snapshot-bytes-from-stream";
 			const key = `${crypto.randomUUID()}.snapshot`;
 
 			yield* s3.createBucket({ Bucket: bucket });
+			const kv = yield* makeS3KV(bucket);
 			yield* kv.writeStream(
 				key,
 				Stream.fromIterable([
