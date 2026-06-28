@@ -34,6 +34,21 @@ const getOutput = ([bin, ...args]: [string, ...string[]]): string => {
 	return result.stdout.trim();
 };
 
+const getOptionalOutput = ([bin, ...args]: [string, ...string[]]): string => {
+	const result = spawnSync(bin, args, {
+		cwd: process.cwd(),
+		stdio: ["ignore", "pipe", "ignore"],
+		encoding: "utf8",
+		env: process.env,
+	});
+
+	if (result.status !== 0) {
+		return "";
+	}
+
+	return result.stdout.trim();
+};
+
 const waitForCleanGit = async (message: string): Promise<void> => {
 	while (true) {
 		const status = getOutput(["git", "status", "--porcelain"]);
@@ -104,6 +119,45 @@ const isCurrentVersionPublished = async (): Promise<boolean> => {
 	return result.status === 0;
 };
 
+const showCommitsForChangelog = (): void => {
+	const latestVersionTag = getOptionalOutput([
+		"git",
+		"describe",
+		"--tags",
+		"--abbrev=0",
+		"--match",
+		"v*",
+	]);
+	const commits = latestVersionTag
+		? getOutput(["git", "log", "--reverse", "--oneline", `${latestVersionTag}..HEAD`])
+		: getOutput(["git", "log", "--reverse", "--oneline", "--max-count", "20"]);
+
+	console.log("Commits to help write the changelog:");
+	if (latestVersionTag) {
+		console.log(`Since ${latestVersionTag}:`);
+	} else {
+		console.log("No previous v-tag found. Showing recent commits:");
+	}
+	console.log(commits.length > 0 ? commits : "No commits found.");
+	console.log("");
+};
+
+const publishAndTag = async (): Promise<void> => {
+	const { version } = await getPackageInfo();
+	const versionTag = `v${version}`;
+
+	run(["bun", "run", "build"]);
+	run(["bunx", "changeset", "publish", "--no-git-tag"]);
+
+	if (getOptionalOutput(["git", "rev-parse", "-q", "--verify", `refs/tags/${versionTag}`])) {
+		console.log(`Git tag ${versionTag} already exists.`);
+		return;
+	}
+
+	run(["git", "tag", versionTag]);
+	console.log(`Created git tag ${versionTag}.`);
+};
+
 const ensureNpmAuth = async (): Promise<void> => {
 	while (true) {
 		const result = spawnSync("npm", ["whoami"], {
@@ -145,8 +199,7 @@ const guide = async (): Promise<void> => {
 			return;
 		}
 
-		run(["bun", "run", "build"]);
-		run(["bunx", "changeset", "publish"]);
+		await publishAndTag();
 
 		const pushAnswer = (
 			await rl.question("Push commit and tags now? Type `push` to continue.\n> ")
@@ -160,6 +213,7 @@ const guide = async (): Promise<void> => {
 	}
 
 	if (!pendingChangeset) {
+		showCommitsForChangelog();
 		console.log("No pending changeset found. Starting interactive changeset prompt.");
 		run(["bunx", "changeset"]);
 
@@ -192,8 +246,7 @@ const guide = async (): Promise<void> => {
 		return;
 	}
 
-	run(["bun", "run", "build"]);
-	run(["bunx", "changeset", "publish"]);
+	await publishAndTag();
 
 	const pushAnswer = (
 		await rl.question("Push commit and tags now? Type `push` to continue.\n> ")
@@ -234,8 +287,7 @@ const main = async (): Promise<void> => {
 			case "publish": {
 				ensureCleanGit();
 				await ensureNpmAuth();
-				run(["bun", "run", "build"]);
-				run(["bunx", "changeset", "publish"]);
+				await publishAndTag();
 				console.log("Published. Push commit and tags with `git push --follow-tags`.");
 				break;
 			}
