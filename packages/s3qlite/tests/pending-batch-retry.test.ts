@@ -55,7 +55,7 @@ const makeFaultyRemoteKV = (inner: KV): KV => {
 };
 
 describe("pending batch retry", () => {
-	it("retries pending batches after failed push", async () => {
+	it.concurrent("retries pending batches after failed push", async () => {
 		await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {

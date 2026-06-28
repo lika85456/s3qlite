@@ -10,6 +10,8 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname } from "node:path";
 
+import { makeS3KV } from "../../src/kv/s3KV";
+
 const accessKey = "test-access-key";
 const secretKey = "test-secret-key";
 const image = "rustfs/rustfs:latest";
@@ -230,6 +232,16 @@ export const RustfsLive = Layer.unwrapEffect(
 );
 
 export const rustfs = withLayer(RustfsLive, { timeout: "60 seconds" });
+
+export const makeRustfsRemoteKV = (prefix = "bucket") =>
+	Effect.gen(function* () {
+		const s3 = yield* S3;
+		const { makeBucketName } = yield* Rustfs;
+		const bucket = makeBucketName(prefix);
+
+		yield* s3.createBucket({ Bucket: bucket });
+		return yield* makeS3KV(bucket);
+	});
 
 export const setupRustfs = async (): Promise<void> => {
 	await Effect.runPromise(

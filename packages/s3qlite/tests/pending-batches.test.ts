@@ -22,7 +22,7 @@ const readRows = async (db: Database): Promise<unknown[]> => {
 };
 
 describe("pending batches", () => {
-	it("accumulates across pulls and drains on push", async () => {
+	it.concurrent("accumulates across pulls and drains on push", async () => {
 		await Effect.runPromise(
 			Effect.scoped(
 				Effect.gen(function* () {
