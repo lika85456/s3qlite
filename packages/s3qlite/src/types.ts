@@ -1,6 +1,7 @@
 import type { Database } from "@tursodatabase/database";
 import type { Effect } from "effect";
 
+import type { AlreadyExistsError, SameNameError, SourceDoesNotExistError } from "./fork";
 import type { ConflictError } from "./kv/kv";
 
 export type Snapshot = {
@@ -73,6 +74,8 @@ export type S3qliteDatabase = Database & {
 	pull: () => Effect.Effect<void, Error>;
 	push: () => Effect.Effect<void, ConflictError>;
 	sync: () => Effect.Effect<void, Error | ConflictError>;
-	fork: (dbName: string) => Effect.Effect<void, Error>;
+	fork: (
+		dbName: string,
+	) => Effect.Effect<void, SameNameError | AlreadyExistsError | SourceDoesNotExistError>;
 	checkpoint: () => Effect.Effect<void, Error>;
 };

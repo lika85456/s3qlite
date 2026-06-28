@@ -4,6 +4,7 @@ import { applyBatch } from "./batches";
 import { getLatestChangeId } from "./cdc/extract";
 import { truncate } from "./cdc/truncate";
 import { ConnectionConfig, ConnectionState } from "./contexts";
+import { fork } from "./fork";
 import { makeFileKV } from "./kv/fileKV";
 import { makeS3KV } from "./kv/s3KV";
 import { pullFiles } from "./kv/syncFiles";
@@ -200,7 +201,8 @@ export const connect = (dbName: string, options: ConnectionOptions) =>
 					yield* push();
 				}).pipe(Effect.retry(Schedule.recurs(2)), Effect.provide(ctx)),
 			)) as typeof wrapper.sync;
-		wrapper.fork = () => Effect.die(new Error("Not implemented"));
+		wrapper.fork = (nextDbName) =>
+			mutex.withPermits(1)(fork(nextDbName).pipe(Effect.provide(ctx)));
 		wrapper.checkpoint = () => Effect.die(new Error("Not implemented"));
 
 		return wrapper;
