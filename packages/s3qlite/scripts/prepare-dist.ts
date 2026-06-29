@@ -72,6 +72,8 @@ const walk = async (directory: string): Promise<void> => {
 const distPackageJson = {
 	name: packageJson.name,
 	version: packageJson.version,
+	license: packageJson.license,
+	repository: packageJson.repository,
 	type: "module",
 	sideEffects: false,
 	dependencies: packageJson.dependencies,
@@ -108,5 +110,9 @@ await writeFile(
 await copyFile(
 	new URL("../../../README.md", import.meta.url),
 	new URL("../dist/README.md", import.meta.url),
+);
+await copyFile(
+	new URL("../../../LICENSE", import.meta.url),
+	new URL("../dist/LICENSE", import.meta.url),
 );
 await writeFile(new URL("../dist/package.json", import.meta.url), `${distPackageJsonText}\n`);
