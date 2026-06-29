@@ -1,5 +1,11 @@
 # s3qlite
 
+## 0.2.3
+
+### Patch Changes
+
+- licence and repo link in npm
+
 ## 0.2.2
 
 ### Patch Changes
