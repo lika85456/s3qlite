@@ -55,4 +55,4 @@ The local directory (by default `./.s3qlite/`) is expected to have the following
 
 # Known issues
 
-- If two instances make colliding changes and try to merge, one of the instances sync will fail. I would like to see a option for the sync that would "ask" the client for resolution, either a callback, or a mergeConflictPrefer: "remote" | "local" option, or something like that.
+- Colliding primary-key changes currently resolve with a last-push-wins strategy during sync. If a different merge strategy is needed, add an explicit conflict-resolution option instead of changing the default implicitly.
