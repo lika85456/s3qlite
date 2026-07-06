@@ -1,5 +1,11 @@
 # s3qlite
 
+## 0.2.4
+
+### Patch Changes
+
+- new `from` operation
+
 ## 0.2.3
 
 ### Patch Changes
@@ -18,9 +24,9 @@
 
 - Added license.
 
-    Added fork to README.
+  Added fork to README.
 
-    Added typed error for push to README.
+  Added typed error for push to README.
 
 ## 0.2.0
 
