@@ -4,6 +4,7 @@ import { Effect } from "effect";
 import type { Scope } from "effect";
 
 import { connect as connectInternal, initializeContexts } from "./connection";
+import { fromInternal } from "./from";
 import type { ConnectionOptions, S3qliteDatabase } from "./types";
 
 export * from "./cdc/apply";
@@ -15,6 +16,7 @@ export * from "./kv/kv";
 export * from "./kv/memoryKV";
 export * from "./kv/s3KV";
 export * from "./types";
+export { FileNotFoundError } from "./from";
 
 export { initializeContexts as initContexts };
 
@@ -26,4 +28,9 @@ export const connect = (
 		Effect.flatMap((ctx) =>
 			connectInternal(dbName, connectionOptions).pipe(Effect.provide(ctx)),
 		),
+	);
+
+export const from = (pathToFile: string, dbName: string, connectionOptions: ConnectionOptions) =>
+	initializeContexts(connectionOptions).pipe(
+		Effect.flatMap((ctx) => fromInternal(pathToFile, dbName).pipe(Effect.provide(ctx))),
 	);

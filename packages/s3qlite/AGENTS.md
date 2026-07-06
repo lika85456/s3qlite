@@ -32,6 +32,8 @@ Except normal SQL operations and what the @tursodatabase/database provides, this
 
 - checkpoint: creates a new snapshot from the current state of the database and pushes the change to the remote. (Won't implement yet).
 
+- from: a standalone function (not a method on the database instance) that imports an existing local SQLite database file into s3qlite. It copies the file into the local KV store, truncates the WAL, creates a snapshot and head, and uploads them to S3. After import, the database is accessible via `connect()`. Usage: `from(pathToFile, dbName, connectionOptions)`. Errors: `AlreadyExistsError` (target dbName already taken), `FileNotFoundError` (source file doesn't exist).
+
 During pull/push operations the library halts the clients possible concurrent requests to the database and queues them until the operation is finished.
 
 # Testing strategy

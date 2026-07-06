@@ -3,7 +3,7 @@ import { layer as fileSystemLayer } from "@effect/platform-node/NodeFileSystem";
 import type { Database } from "@tursodatabase/database";
 import { Effect, Exit, Scope } from "effect";
 
-import { connect as connectEffect } from "./src/index";
+import { connect as connectEffect, from as fromEffect } from "./src/index";
 import type { ConnectionOptions, S3qliteDatabase } from "./src/types";
 
 type PromiseMethods = {
@@ -56,6 +56,26 @@ export const connect = async (
 	} catch (error) {
 		await Effect.runPromise(Scope.close(scope, Exit.void));
 		throw error;
+	}
+};
+
+export const from = async (
+	pathToFile: string,
+	dbName: string,
+	{ s3, ...connectionOptions }: PromiseConnectionOptions,
+): Promise<void> => {
+	const scope = await Effect.runPromise(Scope.make());
+
+	try {
+		await Effect.runPromise(
+			fromEffect(pathToFile, dbName, connectionOptions).pipe(
+				Effect.provide(fileSystemLayer),
+				Effect.provide(S3.layer(s3 ?? {})),
+				Effect.provideService(Scope.Scope, scope),
+			),
+		);
+	} finally {
+		await Effect.runPromise(Scope.close(scope, Exit.void));
 	}
 };
 

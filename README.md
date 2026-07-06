@@ -134,6 +134,27 @@ Fork fails with typed errors in the Effect API:
 - `AlreadyExistsError` when the target database already exists.
 - `SourceDoesNotExistError` when the source database does not exist remotely.
 
+## from(pathToFile, dbName, options): Promise<void>
+
+A standalone function that imports an existing local SQLite database into S3Qlite.
+
+```ts
+import { connect, from } from "@lika85456/s3qlite";
+
+await from("path/to/local.db", "imported-db", {
+	bucket: "s3qlite",
+});
+
+const db = await connect("imported-db", {
+	bucket: "s3qlite",
+});
+```
+
+Typed errors in the Effect API:
+
+- `AlreadyExistsError` when a database with the target name already exists.
+- `FileNotFoundError` when the source file does not exist.
+
 # How does it work?
 
 S3Qlite uses Turso CDC to store locally created changes. During sync these changes are batched and synced to/from the provided S3 bucket and applied, so multiple instances can do work at the same time on the same database with minimal S3 requests and minimal transfered data. Thanks to this approach a point in-time state of the database can be reconstructed as well as easily forking the database without additional overhead.
