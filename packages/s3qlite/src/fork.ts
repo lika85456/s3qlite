@@ -1,24 +1,9 @@
-import { Data, Effect, Option } from "effect";
+import { Effect, Option } from "effect";
 
 import { ConnectionConfig } from "./contexts";
 import { RemoteKV, headKey } from "./storage";
-
-export class SameNameError extends Data.TaggedError("SameNameError")<{
-	readonly dbName: string;
-	readonly message: string;
-}> {}
-
-export class AlreadyExistsError extends Data.TaggedError("AlreadyExistsError")<{
-	readonly dbName: string;
-	readonly message: string;
-}> {}
-
-export class SourceDoesNotExistError extends Data.TaggedError("SourceDoesNotExistError")<{
-	readonly dbName: string;
-	readonly message: string;
-}> {}
-
-export type ForkError = SameNameError | AlreadyExistsError | SourceDoesNotExistError;
+import { AlreadyExistsError, SameNameError, SourceDoesNotExistError } from "./types";
+import type { ForkError } from "./types";
 
 export const fork = (
 	nextDbName: string,

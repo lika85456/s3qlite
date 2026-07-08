@@ -3,8 +3,8 @@ import { Data, Effect, Option, Stream } from "effect";
 import type { Scope } from "effect";
 
 import { truncate } from "./cdc/truncate";
-import { AlreadyExistsError } from "./fork";
 import { LocalKV, RemoteKV, dbKey, encodeJson, headKey, snapshotKey } from "./storage";
+import { AlreadyExistsError } from "./types";
 import type { Head, StoredHead } from "./types";
 
 export class FileNotFoundError extends Data.TaggedError("FileNotFoundError")<{

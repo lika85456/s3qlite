@@ -4,14 +4,10 @@ import { Effect, Option } from "effect";
 
 import { connect } from "../src/connection";
 import { ConnectionConfig } from "../src/contexts";
-import {
-	AlreadyExistsError,
-	SameNameError,
-	SourceDoesNotExistError,
-	fork as runFork,
-} from "../src/fork";
+import { fork as runFork } from "../src/fork";
 import { makeMemoryKV } from "../src/kv/memoryKV";
 import { LocalKV, RemoteKV, getJson, headKey } from "../src/storage";
+import { AlreadyExistsError, SameNameError, SourceDoesNotExistError } from "../src/types";
 import type { Head } from "../src/types";
 
 import { makeRustfsRemoteKV, rustfs } from "./utils/rustfs";

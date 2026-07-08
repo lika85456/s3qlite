@@ -10,7 +10,6 @@ import type { ConnectionOptions, S3qliteDatabase } from "./types";
 export * from "./cdc/apply";
 export * from "./cdc/extract";
 export * from "./cdc/types";
-export * from "./fork";
 export * from "./kv/fileKV";
 export * from "./kv/kv";
 export * from "./kv/memoryKV";

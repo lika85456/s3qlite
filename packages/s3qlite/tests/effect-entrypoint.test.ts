@@ -3,12 +3,22 @@ import { layer as fileSystemLayer } from "@effect/platform-node/NodeFileSystem";
 import { expect } from "@effect/vitest";
 import { Effect } from "effect";
 
+import * as effectApi from "../effect";
 import { BucketDoesNotExistError, connect } from "../effect";
+import * as promiseApi from "../index";
 import { connect as connectPromise } from "../index";
 
 import { Rustfs, rustfs } from "./utils/rustfs";
 
 rustfs("effect entrypoint", (it) => {
+	it("does not expose standalone fork as a package export", () => {
+		expect("fork" in promiseApi).toBe(false);
+		expect("fork" in effectApi).toBe(false);
+		expect(effectApi.AlreadyExistsError).toBeDefined();
+		expect(effectApi.SameNameError).toBeDefined();
+		expect(effectApi.SourceDoesNotExistError).toBeDefined();
+	});
+
 	it.effect("uses the raw scoped effect api with explicit dependencies", () =>
 		Effect.scoped(
 			Effect.gen(function* () {

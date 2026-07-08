@@ -41,22 +41,26 @@
 		"check-types": "tsgo --noEmit"
 	},
 	"dependencies": {
-		"@effect-aws/client-s3": "^1.11.0",
-		"@effect/platform": "^0.96.0",
-		"@effect/platform-bun": "^0.89.0",
 		"@effect/platform-node": "^0.106.0",
-		"@tursodatabase/database": "^0.6.0",
-		"effect": "^3.21.2",
 		"protobufjs": "^8.4.2",
 		"uuid": "^14.0.0"
 	},
 	"devDependencies": {
+		"@effect-aws/client-s3": "^1.11.0",
+		"@effect/platform": "^0.96.0",
+		"@effect/platform-bun": "^0.89.0",
 		"@effect/vitest": "^0.29.0",
+		"@tursodatabase/database": "^0.6.0",
 		"bun-types": "^1.3.9",
 		"drizzle-orm": "^1.0.0-beta.22",
+		"effect": "^3.21.2",
 		"fast-check": "^4.8.0"
 	},
 	"peerDependencies": {
+		"@effect-aws/client-s3": "^1.11.0",
+		"@effect/platform": "^0.96.0",
+		"@tursodatabase/database": "^0.6.0",
+		"effect": "^3.21.2",
 		"zod": "^4.0.0"
 	}
 }

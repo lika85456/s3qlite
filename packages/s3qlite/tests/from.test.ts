@@ -5,10 +5,10 @@ import { connect as connectTurso } from "@tursodatabase/database";
 import { Effect } from "effect";
 
 import { connect } from "../src/connection";
-import { AlreadyExistsError } from "../src/fork";
 import { FileNotFoundError, fromInternal } from "../src/from";
 import { makeMemoryKV } from "../src/kv/memoryKV";
 import { LocalKV, RemoteKV } from "../src/storage";
+import { AlreadyExistsError } from "../src/types";
 
 import { makeRustfsRemoteKV, rustfs } from "./utils/rustfs";
 

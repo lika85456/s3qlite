@@ -1,8 +1,25 @@
 import type { Database } from "@tursodatabase/database";
+import { Data } from "effect";
 import type { Effect } from "effect";
 
-import type { AlreadyExistsError, SameNameError, SourceDoesNotExistError } from "./fork";
 import type { ConflictError } from "./kv/kv";
+
+export class SameNameError extends Data.TaggedError("SameNameError")<{
+	readonly dbName: string;
+	readonly message: string;
+}> {}
+
+export class AlreadyExistsError extends Data.TaggedError("AlreadyExistsError")<{
+	readonly dbName: string;
+	readonly message: string;
+}> {}
+
+export class SourceDoesNotExistError extends Data.TaggedError("SourceDoesNotExistError")<{
+	readonly dbName: string;
+	readonly message: string;
+}> {}
+
+export type ForkError = SameNameError | AlreadyExistsError | SourceDoesNotExistError;
 
 export type Snapshot = {
 	id: string;
