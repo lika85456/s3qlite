@@ -56,6 +56,12 @@ export type StoredHead = {
 	pendingBatches?: PendingBatch[];
 };
 
+export type SyncMode =
+	| "manual"
+	| { type: "interval"; everyMs: number }
+	| { type: "transaction" }
+	| { type: "push-on-change" };
+
 // export type ConflictResolutionMode = "fail" | "preferRemote" | "preferLocal";
 //
 // export type ConflictOperation = "pull" | "push" | "sync";
@@ -84,6 +90,7 @@ export type ConnectionOptions = {
 	bucket: string;
 	// conflictResolution?: ConflictResolutionMode | ConflictResolver;
 	localDirectory?: string;
+	syncMode?: SyncMode;
 };
 // } & (StrongConsistencyOptions | EventualConsistencyOptions);
 

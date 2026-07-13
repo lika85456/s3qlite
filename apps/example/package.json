@@ -1,0 +1,19 @@
+{
+	"name": "@s3qlite/example",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"check-types": "tsc --noEmit -p tsconfig.json",
+		"format": "oxfmt .",
+		"lint": "oxlint .",
+		"test": "vitest --config vitest.config.ts",
+		"test:ci": "vitest run --config vitest.config.ts"
+	},
+	"dependencies": {
+		"@effect-aws/client-s3": "^1.11.0",
+		"@effect/platform-node": "^0.106.0",
+		"@lika85456/s3qlite": "workspace:*",
+		"dotenv": "^16.4.7",
+		"effect": "^3.21.2"
+	}
+}

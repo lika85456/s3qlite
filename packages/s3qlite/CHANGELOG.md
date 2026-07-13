@@ -24,9 +24,9 @@
 
 - Added license.
 
-  Added fork to README.
+    Added fork to README.
 
-  Added typed error for push to README.
+    Added typed error for push to README.
 
 ## 0.2.0
 

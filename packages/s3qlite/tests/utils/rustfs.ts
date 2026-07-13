@@ -6,7 +6,7 @@ import * as BunContext from "@effect/platform-bun/BunContext";
 import * as Command from "@effect/platform/Command";
 import { layer as withLayer } from "@effect/vitest";
 import { Context, Effect, Layer, Option, Schedule } from "effect";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname } from "node:path";
 
@@ -18,6 +18,9 @@ const image = "rustfs/rustfs:latest";
 const region = "us-east-1";
 const rustfsStateFile = "/tmp/opencode/s3qlite-rustfs.json";
 const rustfsStateLockDirectory = "/tmp/opencode/s3qlite-rustfs.lock";
+const rustfsStateLockOwnerFile = `${rustfsStateLockDirectory}/pid`;
+const rustfsStateLockStaleMs = 2_000;
+const rustfsStateLockTimeoutMs = 60_000;
 
 let cachedState = Option.none<RustfsState>();
 
@@ -79,13 +82,44 @@ const reservePort = Effect.tryPromise({
 	catch: (error) => new Error(`Failed to reserve port ${String(error)}`),
 });
 
+const isRustfsStateLockStale = async (): Promise<boolean> => {
+	try {
+		const owner = await readFile(rustfsStateLockOwnerFile, "utf8")
+			.then(Option.some)
+			.catch(() => Option.none<string>());
+		if (Option.isSome(owner)) {
+			const pid = Number(owner.value.trim());
+			if (Number.isInteger(pid) && pid > 0) {
+				return !isProcessAlive(pid);
+			}
+		}
+
+		const info = await stat(rustfsStateLockDirectory);
+		return Date.now() - info.mtimeMs > rustfsStateLockStaleMs;
+	} catch (error) {
+		if (
+			error &&
+			typeof error === "object" &&
+			"code" in error &&
+			(error.code === "ENOENT" || error.code === "ENOTDIR")
+		) {
+			return false;
+		}
+
+		throw error;
+	}
+};
+
 const withStateLock = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E | Error, R> =>
 	Effect.acquireUseRelease(
 		Effect.tryPromise({
 			try: async () => {
+				const startedAt = Date.now();
+
 				while (true) {
 					try {
 						await mkdir(rustfsStateLockDirectory);
+						await writeFile(rustfsStateLockOwnerFile, String(process.pid));
 						return;
 					} catch (error) {
 						if (
@@ -94,6 +128,18 @@ const withStateLock = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A
 							"code" in error &&
 							error.code === "EEXIST"
 						) {
+							if (await isRustfsStateLockStale()) {
+								await rm(rustfsStateLockDirectory, {
+									force: true,
+									recursive: true,
+								});
+								continue;
+							}
+
+							if (Date.now() - startedAt > rustfsStateLockTimeoutMs) {
+								throw new Error("Timed out waiting for RustFS state lock");
+							}
+
 							await new Promise((resolve) => setTimeout(resolve, 50));
 							continue;
 						}

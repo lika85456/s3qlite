@@ -45,6 +45,48 @@ console.log(users);
 await db.close();
 ```
 
+## Sync Modes
+
+`connect()` accepts a `syncMode` option that controls automatic synchronization.
+
+```ts
+const db = await connect("app-123", {
+	bucket: "s3qlite",
+	syncMode: "manual",
+});
+```
+
+Available modes:
+
+- `"manual"` (default): no automatic sync. Only `pull()`, `push()`, and `sync()` talk to remote.
+- `{ type: "interval", everyMs: 5000 }`: calls `sync()` periodically in the background.
+- `{ type: "transaction" }`: pulls before every wrapped database operation, then pushes after it if the local CDC change id increased.
+- `{ type: "push-on-change" }`: never pulls automatically, but pushes after a wrapped operation if the local CDC change id increased.
+
+Examples:
+
+```ts
+await connect("manual-db", {
+	bucket: "s3qlite",
+	syncMode: "manual",
+});
+
+await connect("interval-db", {
+	bucket: "s3qlite",
+	syncMode: { type: "interval", everyMs: 5_000 },
+});
+
+await connect("transaction-db", {
+	bucket: "s3qlite",
+	syncMode: { type: "transaction" },
+});
+
+await connect("push-db", {
+	bucket: "s3qlite",
+	syncMode: { type: "push-on-change" },
+});
+```
+
 ## Effect API
 
 ```ts
@@ -161,5 +203,5 @@ S3Qlite uses Turso CDC to store locally created changes. During sync these chang
 
 # Limitations
 
-- Due to the last push wins strategy, a unwanted "corruption" of data might occur. Have in mind that the synchronization is just application of CDC rows - if two instances update the same row, the last pushed edit wins. Try to avoid autoincrement and prefer other databases for more transactional workloads. S3Qlite however does support fully transactional model - sync before & after every operation.
+- Due to the last push wins strategy, a unwanted "corruption" of data might occur. Have in mind that the synchronization is just application of CDC rows - if two instances update the same row, the last pushed edit wins. Try to avoid autoincrement and prefer other databases for more transactional workloads. If you want the most eager built-in syncing, use `syncMode: { type: "transaction" }`.
 - Checkpointing is not implemented yet.

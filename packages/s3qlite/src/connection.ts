@@ -1,4 +1,4 @@
-import { Context, Effect, Option, Ref, Schedule } from "effect";
+import { Context, Effect, Option, Ref, Schedule, Scope } from "effect";
 
 import { applyBatch } from "./batches";
 import { getLatestChangeId } from "./cdc/extract";
@@ -21,8 +21,32 @@ import {
 	headKey,
 	snapshotKey,
 } from "./storage";
-import type { ConnectionOptions, Head, S3qliteDatabase, StoredHead } from "./types";
+import type { ConnectionOptions, Head, S3qliteDatabase, StoredHead, SyncMode } from "./types";
 import { wrapDatabase } from "./wrapDatabase";
+
+type NormalizedSyncMode =
+	| { type: "manual" }
+	| { type: "interval"; everyMs: number }
+	| { type: "transaction" }
+	| { type: "push-on-change" };
+
+const normalizeSyncMode = (syncMode?: SyncMode): NormalizedSyncMode => {
+	if (!syncMode || syncMode === "manual") {
+		return { type: "manual" };
+	}
+
+	if (syncMode.type === "interval") {
+		if (!Number.isInteger(syncMode.everyMs) || syncMode.everyMs <= 0) {
+			throw new Error(
+				`syncMode.interval.everyMs must be a positive integer, got ${syncMode.everyMs}`,
+			);
+		}
+
+		return syncMode;
+	}
+
+	return syncMode;
+};
 
 export const initializeContexts = (connectionOptions: ConnectionOptions) =>
 	Effect.gen(function* () {
@@ -33,6 +57,8 @@ export const initializeContexts = (connectionOptions: ConnectionOptions) =>
 
 export const connect = (dbName: string, options: ConnectionOptions) =>
 	Effect.gen(function* () {
+		const syncMode = normalizeSyncMode(options.syncMode);
+		const scope = yield* Scope.Scope;
 		const remote = yield* RemoteKV;
 		const local = yield* LocalKV;
 
@@ -168,42 +194,124 @@ export const connect = (dbName: string, options: ConnectionOptions) =>
 			Context.add(ConnectionState, connectionStateValue),
 			Context.add(LocalKV, local),
 			Context.add(RemoteKV, remote),
+			Context.add(Scope.Scope, scope),
 		);
 
 		const mutex = yield* Effect.makeSemaphore(1);
 
+		const runPull = pull().pipe(Effect.provide(ctx), Effect.asVoid);
+		const runPush = push().pipe(Effect.provide(ctx), Effect.asVoid);
+		const runSync = Effect.gen(function* () {
+			yield* pull();
+			yield* push();
+		}).pipe(Effect.retry(Schedule.recurs(2)), Effect.provide(ctx));
+
+		const pushIfChanged = <A>(effect: Effect.Effect<A, Error>) =>
+			Effect.gen(function* () {
+				const beforeChangeId = yield* getLatestChangeId(currentConnection);
+				const result = yield* effect;
+				const afterChangeId = yield* getLatestChangeId(currentConnection);
+
+				if (afterChangeId > beforeChangeId) {
+					yield* runPush;
+				}
+
+				return result;
+			});
+
 		const wrapper = wrapDatabase(
 			() => currentConnection,
 			(call, method) => {
-				if (method === "iterate" || method === "transaction") {
-					return call();
+				if (method === "iterate") {
+					if (syncMode.type !== "transaction") {
+						return call();
+					}
+
+					return (async function* () {
+						await Effect.runPromise(mutex.withPermits(1)(runPull));
+						for await (const row of call() as AsyncIterable<unknown>) {
+							yield row;
+						}
+					})() as never;
 				}
 
 				return Effect.runPromise(
 					mutex.withPermits(1)(
-						Effect.promise(() =>
-							Promise.resolve().then(call as () => Promise<unknown>),
-						),
+						Effect.gen(function* () {
+							const runCall = Effect.promise(() =>
+								Promise.resolve().then(call as () => Promise<unknown>),
+							);
+
+							if (syncMode.type === "manual" || method === "close") {
+								return yield* runCall;
+							}
+
+							if (syncMode.type === "push-on-change") {
+								return yield* pushIfChanged(runCall);
+							}
+
+							if (syncMode.type === "transaction") {
+								yield* runPull;
+								return yield* pushIfChanged(runCall);
+							}
+
+							return yield* runCall;
+						}),
 					),
 				) as never;
 			},
 		) as unknown as S3qliteDatabase;
 
-		wrapper.pull = (() =>
-			mutex.withPermits(1)(
-				pull().pipe(Effect.provide(ctx), Effect.asVoid),
-			)) as typeof wrapper.pull;
-		wrapper.push = () => mutex.withPermits(1)(push().pipe(Effect.provide(ctx), Effect.asVoid));
-		wrapper.sync = (() =>
-			mutex.withPermits(1)(
-				Effect.gen(function* () {
-					yield* pull();
-					yield* push();
-				}).pipe(Effect.retry(Schedule.recurs(2)), Effect.provide(ctx)),
-			)) as typeof wrapper.sync;
+		wrapper.pull = (() => mutex.withPermits(1)(runPull)) as typeof wrapper.pull;
+		wrapper.push = () => mutex.withPermits(1)(runPush);
+		wrapper.sync = (() => mutex.withPermits(1)(runSync)) as typeof wrapper.sync;
 		wrapper.fork = (nextDbName) =>
 			mutex.withPermits(1)(fork(nextDbName).pipe(Effect.provide(ctx)));
 		wrapper.checkpoint = () => Effect.die(new Error("Not implemented"));
+
+		if (syncMode.type === "interval") {
+			let stopped = false;
+			let timeoutId = Option.none<ReturnType<typeof setTimeout>>();
+
+			const scheduleNextSync = () => {
+				timeoutId = Option.some(
+					setTimeout(() => {
+						void Effect.runPromise(
+							mutex
+								.withPermits(1)(runSync)
+								.pipe(Effect.catchAll(() => Effect.void)),
+						).finally(() => {
+							if (!stopped) {
+								scheduleNextSync();
+							}
+						});
+					}, syncMode.everyMs),
+				);
+			};
+
+			scheduleNextSync();
+			wrapper.close = (() => {
+				return Effect.runPromise(
+					mutex.withPermits(1)(
+						Effect.sync(() => {
+							stopped = true;
+							Option.map(timeoutId, clearTimeout);
+							timeoutId = Option.none();
+						}).pipe(
+							Effect.flatMap(() => Effect.promise(() => currentConnection.close())),
+						),
+					),
+				);
+			}) as typeof wrapper.close;
+
+			yield* Effect.addFinalizer(() =>
+				Effect.sync(() => {
+					stopped = true;
+					Option.map(timeoutId, clearTimeout);
+					timeoutId = Option.none();
+				}),
+			);
+		}
 
 		return wrapper;
 	});

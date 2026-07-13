@@ -2,7 +2,7 @@
 	"$schema": "https://turborepo.dev/schema.json",
 	"tasks": {
 		"check-types": {
-			"dependsOn": ["^check-types"],
+			"dependsOn": ["^check-types", "^build"],
 			"inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json", "bun.lock"],
 			"outputs": []
 		},
@@ -46,7 +46,7 @@
 			"cache": false
 		},
 		"test:ci": {
-			"dependsOn": ["lint", "check-types"],
+			"dependsOn": ["lint", "check-types", "^build"],
 			"outputs": ["coverage/**"],
 			"inputs": [
 				"src/**",
