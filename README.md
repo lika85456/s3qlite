@@ -12,6 +12,62 @@ Tired of not paying a single cent with the generous free tier of Turso Cloud? Ru
 
 `bun add @lika85456/s3qlite`
 
+## CLI
+
+Manage S3Qlite databases and run SQL from your shell.
+
+Install it globally:
+
+```sh
+bun add -g @lika85456/s3qlite-cli
+```
+
+Configure your S3-compatible storage once:
+
+```sh
+s3qlite alias set local http://localhost:9000 ACCESS_KEY SECRET_KEY --path on
+```
+
+For AWS S3, use its regional endpoint:
+
+```sh
+s3qlite alias set aws https://s3.us-east-1.amazonaws.com AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+```
+
+Then create a database and use it:
+
+```sh
+s3qlite create local/databases/customers
+s3qlite sql local/databases/customers \
+	'CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL)'
+s3qlite sql local/databases/customers \
+	"INSERT INTO users (name) VALUES ('Alice')"
+s3qlite sql local/databases/customers \
+	'SELECT id, name FROM users ORDER BY id'
+```
+
+List, fork, or remove databases:
+
+```sh
+s3qlite ls local/databases
+s3qlite fork local/databases/customers local/databases/customers-preview
+s3qlite fork local/databases/customers aws/s3qlite-backups/customers
+s3qlite remove local/databases/customers-preview --force
+```
+
+Database targets use `ALIAS/BUCKET/DATABASE`; `ls` uses `ALIAS/BUCKET`. Use `alias list` to
+see configured storage and `alias remove NAME` to delete an alias. Omit credentials from
+`alias set` to enter them securely at a prompt. Fork targets can use any configured alias and
+bucket.
+
+You can also pipe SQL:
+
+```sh
+printf 'SELECT count(*) AS count FROM users' | s3qlite sql local/databases/customers
+```
+
+Query results are printed as JSON. Run `s3qlite --help` for all commands and options.
+
 # Usage
 
 ## Promise API

@@ -1,0 +1,35 @@
+{
+	"name": "@lika85456/s3qlite-cli",
+	"version": "0.1.0",
+	"license": "MIT",
+	"bin": {
+		"s3qlite": "./dist/cli.js"
+	},
+	"files": [
+		"dist"
+	],
+	"type": "module",
+	"scripts": {
+		"build": "tsc -p tsconfig.build.json",
+		"lint": "oxlint .",
+		"format": "oxfmt .",
+		"test": "vitest",
+		"test:ci": "vitest run --coverage --silent",
+		"test:integration": "vitest",
+		"test:fuzzy": "vitest --passWithNoTests",
+		"check-types": "tsgo --noEmit"
+	},
+	"dependencies": {
+		"@effect-aws/client-s3": "^1.11.0",
+		"@effect/cli": "0.75.0",
+		"@effect/platform": "^0.96.0",
+		"@effect/platform-node": "^0.106.0",
+		"@lika85456/s3qlite": "workspace:*",
+		"effect": "^3.21.2"
+	},
+	"devDependencies": {
+		"@effect/vitest": "^0.29.0",
+		"@types/node": "^24.0.0",
+		"vitest": "^4.1.9"
+	}
+}

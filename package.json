@@ -15,6 +15,7 @@
 		"test:integration": "turbo test:integration",
 		"test:fuzzy": "turbo test:fuzzy",
 		"build": "turbo build",
+		"cli": "bun packages/s3qlite-cli/src/cli.ts",
 		"release:plan": "changeset",
 		"release:status": "changeset status --verbose",
 		"release:version": "bun scripts/release.ts version",
