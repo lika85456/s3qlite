@@ -1,6 +1,6 @@
 {
 	"name": "@lika85456/s3qlite-cli",
-	"version": "0.1.0",
+	"version": "0.1.1",
 	"license": "MIT",
 	"bin": {
 		"s3qlite": "./dist/cli.js"
