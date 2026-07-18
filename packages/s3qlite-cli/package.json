@@ -10,7 +10,7 @@
 	],
 	"type": "module",
 	"scripts": {
-		"build": "tsc -p tsconfig.build.json",
+		"build": "rm -rf dist && bun build src/cli.ts --target=node --format=esm --external @tursodatabase/database --outfile=dist/cli.js",
 		"lint": "oxlint .",
 		"format": "oxfmt .",
 		"test": "vitest",
@@ -24,11 +24,12 @@
 		"@effect/cli": "0.75.0",
 		"@effect/platform": "^0.96.0",
 		"@effect/platform-node": "^0.106.0",
-		"@lika85456/s3qlite": "workspace:*",
+		"@tursodatabase/database": "^0.6.0",
 		"effect": "^3.21.2"
 	},
 	"devDependencies": {
 		"@effect/vitest": "^0.29.0",
+		"@lika85456/s3qlite": "workspace:*",
 		"@types/node": "^24.0.0",
 		"vitest": "^4.1.9"
 	}

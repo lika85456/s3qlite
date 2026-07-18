@@ -6,10 +6,12 @@ import { NodeContext, NodeRuntime } from "@effect/platform-node";
 import { connect, makeS3KV } from "@lika85456/s3qlite";
 import type { Head } from "@lika85456/s3qlite";
 import { Console, Effect, Option, Redacted, Stream } from "effect";
+import { realpathSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
+import { fileURLToPath } from "node:url";
 
 import { CliError, getAlias, readConfig, removeAlias, setAlias } from "./config.js";
 import type { Alias } from "./config.js";
@@ -591,7 +593,7 @@ export const runCli = (args: readonly string[], input: Readable = process.stdin)
 		}),
 	);
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
 	runCli(process.argv).pipe(
 		Effect.provide(NodeContext.layer),
 		NodeRuntime.runMain({ disableErrorReporting: true }),
