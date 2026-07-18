@@ -214,6 +214,26 @@ describe("s3qlite CLI", () => {
 			),
 		));
 
+	it("pulls, pushes, and syncs databases", () =>
+		Effect.runPromise(
+			withFixture(({ bucket, globalArgs }) =>
+				Effect.gen(function* () {
+					const target = `local/${bucket}/sync-db`;
+					yield* Effect.promise(() => run([...globalArgs, "create", target]));
+					for (const [command, output] of [
+						["pull", `Pulled "${target}".`],
+						["push", `Pushed "${target}".`],
+						["sync", `Synced "${target}".`],
+					] as const) {
+						const result = yield* Effect.promise(() =>
+							run([...globalArgs, command, target]),
+						);
+						expect(result).toEqual({ code: 0, stderr: "", stdout: output });
+					}
+				}),
+			),
+		));
+
 	it("forks across buckets and keeps the fork after removing its source", () =>
 		Effect.runPromise(
 			withFixture(({ bucket, globalArgs, rustfs }) =>
@@ -310,6 +330,9 @@ describe("s3qlite CLI", () => {
 			expect(result.stdout).toContain("create");
 			expect(result.stdout).toContain("remove");
 			expect(result.stdout).toContain("fork");
+			expect(result.stdout).toContain("pull");
+			expect(result.stdout).toContain("push");
+			expect(result.stdout).toContain("sync");
 			expect(result.stdout).toContain("sql");
 		} finally {
 			await rm(root, { force: true, recursive: true });

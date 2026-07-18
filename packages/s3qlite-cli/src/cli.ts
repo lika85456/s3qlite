@@ -443,6 +443,40 @@ const forkCommand = Command.make(
 		}),
 );
 
+const makeSyncCommand = (operation: "pull" | "push" | "sync") =>
+	Command.make(operation, { value: targetArgument }, ({ value }) =>
+		Effect.gen(function* () {
+			const globals = yield* root;
+			const { alias, target } = yield* resolveTarget(value, globals.configDirectory);
+			const clientConfig = yield* resolveS3Config(target.bucket, alias);
+			yield* requireDatabase(target, clientConfig);
+			yield* Effect.scoped(
+				openDatabase(target, clientConfig, globals.dataDirectory).pipe(
+					Effect.flatMap((database) =>
+						Effect.tryPromise(() => database[operation]()).pipe(
+							Effect.mapError(
+								(error) =>
+									new CliError({
+										message:
+											error instanceof Error
+												? error.message
+												: `failed to ${operation} database`,
+									}),
+							),
+						),
+					),
+				),
+			);
+			yield* Console.log(
+				`${operation[0].toUpperCase()}${operation.slice(1)}ed "${target.value}".`,
+			);
+		}),
+	);
+
+const pullCommand = makeSyncCommand("pull");
+const pushCommand = makeSyncCommand("push");
+const syncCommand = makeSyncCommand("sync");
+
 const sqlArgument = Args.text({ name: "sql" }).pipe(
 	Args.withDescription("SQL statement, or read from stdin when omitted"),
 	Args.optional,
@@ -526,6 +560,9 @@ const makeCommand = (input: Readable) =>
 			listCommand,
 			removeCommand,
 			forkCommand,
+			pullCommand,
+			pushCommand,
+			syncCommand,
 			makeSqlCommand(input),
 		]),
 	);
