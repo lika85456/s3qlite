@@ -327,7 +327,7 @@ is recorded in `s3qlite_applied_requests` in the same transaction as the write; 
 the stored result without running the write again.
 
 ```ts
-import { Idempotency } from "@lika85456/s3qlite";
+import { Idempotency } from "@lika85456/s3qlite/cluster";
 
 const addItem = (writeId: string, item: Item) =>
 	Idempotency.once(
@@ -413,8 +413,7 @@ import * as PgClient from "@effect/sql-pg/PgClient";
 import { Effect, Layer, Option, Redacted, Schema } from "effect";
 import * as RunnerAddress from "effect/cluster/RunnerAddress";
 import { SqlClient } from "effect/sql/SqlClient";
-import { Idempotency } from "@lika85456/s3qlite";
-import { DurableEntity } from "@lika85456/s3qlite/cluster";
+import { DurableEntity, Idempotency } from "@lika85456/s3qlite/cluster";
 import { AddItem, Cart } from "./protocol";
 
 const CartLive = DurableEntity.toLayer(
@@ -487,8 +486,7 @@ change before them) are pushed. When the instance finds itself fenced, it dies o
 cluster rebuilds it (reopen + claim) and replays the request. The rebuild first waits
 `fencedRestartDelay` (default 10 s), so a runner that resumed after a hang notices that it lost
 its shard locks before it could claim the database back. Handlers also get `S3qlite` (status,
-flush, `S3qlite.durable(...)`) and `S3qliteClient`. Use `DurableEntity.toLayerFromKV` to bring
-your own `LocalKV`/`RemoteKV`.
+flush, `S3qlite.durable(...)`) and `S3qliteClient`.
 
 ### Cluster settings that matter
 

@@ -23,6 +23,12 @@
   (owner mode only).
 - `KV` may implement `list(prefix)` (optional; owner-mode GC needs it). `fork` writes a marker
   object `{source}.forks/{target}`.
+- The public API is explicit now. Removed from the root and `/effect` entry points: the CDC
+  helpers (`extractCDC`, `getLatestChangeId`, `applyCDC`, `replayCDC`, `CDCChangeType` and the CDC
+  types), the KV factories and types (`makeS3KV`, `makeFileKV`, `makeMemoryKV`, `KV`, …), the
+  storage format types (`Head`, `StoredHead`, `Batch`, `PendingBatch`, `Snapshot`) and
+  `initContexts`. `S3qliteClient` exposes `layer`, `S3qliteClient` and `S3qlite` (not `make`,
+  `layerFromKV` or `makeWithEngine`).
 
 ### Features
 
@@ -38,7 +44,7 @@
   close. `S3qlite.flush`, `status`, `snapshot`, `gc`. See `docs/owner-mode.md`.
 - `HeadStore`: keep the authoritative head (and the fencing compare-and-set) in Postgres or another
   SQL database with `HeadStore.layerSql()`; the bucket gets a mirror.
-- `Idempotency.once`: apply a write once per write id.
+- `Idempotency.once` (from `@lika85456/s3qlite/cluster`): apply a write once per write id.
 - `@lika85456/s3qlite/cluster`: `DurableEntity.toLayer` gives every Effect cluster entity its own
   owner-mode database as `SqlClient`, with durable or fast replies per entity and per RPC
   (`RpcReplyMode`).

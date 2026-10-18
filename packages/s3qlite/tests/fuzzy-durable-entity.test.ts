@@ -13,8 +13,8 @@ import fc from "fast-check";
 import { describe, expect, it } from "vitest";
 
 import * as DurableEntity from "../src/cluster/durableEntity";
+import * as Idempotency from "../src/cluster/idempotency";
 import { defaultDbName, fencedRestartWaitMs, replyModeOf } from "../src/cluster/policy";
-import * as Idempotency from "../src/idempotency";
 import { makeMemoryKV } from "../src/kv/memoryKV";
 import * as S3qliteClient from "../src/sql/client";
 import { LocalKV, RemoteKV, headKey } from "../src/storage";

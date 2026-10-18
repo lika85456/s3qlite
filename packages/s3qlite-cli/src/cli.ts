@@ -2,8 +2,6 @@
 
 import { S3 } from "@effect-aws/client-s3";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { connect, makeS3KV } from "@lika85456/s3qlite";
-import type { Head } from "@lika85456/s3qlite";
 import { Console, Effect, Option, Redacted, Stream } from "effect";
 import { Argument, Command, Flag, Prompt } from "effect/cli";
 import { realpathSync } from "node:fs";
@@ -12,6 +10,11 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+
+// The CLI bundles s3qlite from source, including internals that are not part of its public API.
+import { connect } from "../../s3qlite/index.js";
+import { makeS3KV } from "../../s3qlite/src/kv/s3KV.js";
+import type { Head } from "../../s3qlite/src/types.js";
 
 import { CliError, getAlias, readConfig, removeAlias, setAlias } from "./config.js";
 import type { Alias } from "./config.js";

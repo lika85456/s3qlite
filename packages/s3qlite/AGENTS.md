@@ -21,7 +21,10 @@ override procedure in "Testing". Services use `Context.Service`, the SQL client 
   `src/owner/headStore.ts` – `HeadStore` (where the fencing compare-and-set happens: S3 head by
   default, SQL table with `HeadStore.layerSql`). Design: `docs/owner-mode.md`.
 - `src/replyMode.ts` – `Reply.Current` reference and `Reply.durable/fast/withMode`.
-- `src/idempotency.ts` – `Idempotency.once` (write ids in `s3qlite_applied_requests`).
+- Public API: `src/index.ts` (root and `/effect`), `src/sql/public.ts` (`S3qliteClient`
+  namespace) and `src/cluster/public.ts` + `cluster.ts` (`/cluster`) list every export explicitly.
+  Do not add `export *` of internal modules; `tests/public-api.test.ts` pins the list.
+- `src/cluster/idempotency.ts` – `Idempotency.once`, exported from `/cluster` (write ids in `s3qlite_applied_requests`).
 - `src/cluster/durableEntity.ts` – `DurableEntity.toLayer` for Effect cluster entities, exported
   as `@lika85456/s3qlite/cluster` (`cluster.ts`). Its pure decisions (reply mode resolution, fenced
   restart wait, default database name) are in `src/cluster/policy.ts` (internal; property-tested

@@ -3,7 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { Context, Effect, Exit, Layer, Option, Schema, Scope } from "effect";
 import { SqlClient } from "effect/sql/SqlClient";
 
-import * as Idempotency from "../src/idempotency";
+import * as Idempotency from "../src/cluster/idempotency";
 import { makeMemoryKV } from "../src/kv/memoryKV";
 import { HeadStore } from "../src/owner/headStore";
 import { objectPrefix } from "../src/owner/owner";

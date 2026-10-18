@@ -1,1 +1,2 @@
-export * as DurableEntity from "./src/cluster/durableEntity.js";
+export * as DurableEntity from "./src/cluster/public.js";
+export * as Idempotency from "./src/cluster/idempotency.js";

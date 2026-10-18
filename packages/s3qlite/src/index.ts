@@ -8,25 +8,37 @@ import { fromInternal } from "./from";
 import type { FileNotFoundError } from "./from";
 import type { AlreadyExistsError, ConnectionOptions, S3qliteDatabase } from "./types";
 
-export * from "./cdc/apply";
-export * from "./cdc/extract";
-export * from "./cdc/types";
-export * from "./kv/fileKV";
-export * from "./kv/kv";
-export * from "./kv/memoryKV";
-export * from "./kv/s3KV";
-export * from "./types";
-export * as S3qliteClient from "./sql/client";
+// Public API only. CDC, KV and head/batch internals are not exported.
+export { BucketDoesNotExistError } from "./kv/s3KV";
+export { ConflictError } from "./kv/kv";
+export { ReplayError } from "./cdc/apply";
+export { FileNotFoundError } from "./from";
+export {
+	AlreadyExistsError,
+	OwnershipLostError,
+	PushFailedError,
+	SameNameError,
+	SourceDoesNotExistError,
+	SyncModeError,
+} from "./types";
+export type {
+	ConnectionOptions,
+	ForkError,
+	OwnerError,
+	OwnerGcPolicy,
+	OwnerSnapshotPolicy,
+	OwnerSyncMode,
+	ReplyMode,
+	S3qliteDatabase,
+	SyncMode,
+} from "./types";
+export * as S3qliteClient from "./sql/public";
 export { S3qlite, ownerErrorOf } from "./sql/client";
+export type { S3qliteClientConfig, S3qliteService } from "./sql/client";
 export * as Reply from "./replyMode";
 export { HeadStore } from "./owner/headStore";
 export type { HeadStoreShape, VersionedHead } from "./owner/headStore";
 export type { OwnerOpenStats, OwnerStatus } from "./owner/owner";
-export * as Idempotency from "./idempotency";
-export type { S3qliteClientConfig, S3qliteService } from "./sql/client";
-export { FileNotFoundError } from "./from";
-
-export { initializeContexts as initContexts };
 
 export const connect = (
 	dbName: string,

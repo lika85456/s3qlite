@@ -15,7 +15,7 @@ import * as Option from "effect/Option";
 import { SqlClient } from "effect/sql/SqlClient";
 
 import * as DurableEntity from "../../src/cluster/durableEntity";
-import * as Idempotency from "../../src/idempotency";
+import * as Idempotency from "../../src/cluster/idempotency";
 
 import { clusterPgTypes } from "./pg-types";
 import { AppendResult, NotesDurable, NotesFast } from "./protocol";
