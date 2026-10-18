@@ -142,7 +142,7 @@ rustfs("s3qlite schema mutation sync", (it) => {
 				yield* b.pull();
 
 				// Verify index exists by checking unique constraint works
-				const insertError = yield* Effect.either(
+				const insertError = yield* Effect.result(
 					Effect.tryPromise(() =>
 						b.run(
 							"INSERT INTO products (id, sku, price) VALUES (?, ?, ?)",
@@ -152,7 +152,7 @@ rustfs("s3qlite schema mutation sync", (it) => {
 						),
 					),
 				);
-				expect(insertError._tag).toBe("Left");
+				expect(insertError._tag).toBe("Failure");
 
 				// Drop index, push
 				yield* Effect.tryPromise(() => b.exec("DROP INDEX idx_products_sku"));

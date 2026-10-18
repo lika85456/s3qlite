@@ -27,11 +27,14 @@ export const applyBatch = (database: Database, batch: Batch): Effect.Effect<void
 export type ExtractedBatch = {
 	batch: Batch;
 	lastLocalChangeId: number;
+	/** Size of the serialized batch in bytes. */
+	bytes: number;
 };
 
 export const extractBatch = (
 	database: Database,
 	lastChangeId: number,
+	makeId: () => string = v4,
 ): Effect.Effect<Option.Option<ExtractedBatch>, never, LocalKV> =>
 	Effect.gen(function* () {
 		const localKV = yield* LocalKV;
@@ -48,12 +51,13 @@ export const extractBatch = (
 			return yield* Effect.die(new Error("Unexpected empty changes array"));
 		}
 
-		const id = v4();
+		const id = makeId();
 		const serialized = serializeCDC(changes);
 		yield* localKV.set(batchKey(id), serialized);
 
 		return Option.some<ExtractedBatch>({
 			batch: { id },
 			lastLocalChangeId: lastChange.changeId,
+			bytes: serialized.length,
 		});
 	});

@@ -55,7 +55,7 @@ rustfs("push-conflict-retry", (it) => {
 					const conflict = yield* Effect.flip(b.push());
 					expect(conflict).toBeInstanceOf(ConflictError);
 					expect(conflict._tag).toBe("ConflictError");
-					expect(conflict.key).toBe(headKey(dbName));
+					expect(conflict instanceof ConflictError && conflict.key).toBe(headKey(dbName));
 				}
 
 				// B syncs — recovers via pull+push

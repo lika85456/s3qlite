@@ -1,8 +1,8 @@
 import { layer as fileSystemLayer } from "@effect/platform-node/NodeFileSystem";
-import { FileSystem } from "@effect/platform/FileSystem";
 import { expect } from "@effect/vitest";
 import { connect as connectTurso } from "@tursodatabase/database";
 import { Effect } from "effect";
+import { FileSystem } from "effect/FileSystem";
 
 import { connect } from "../src/connection";
 import { FileNotFoundError, fromInternal } from "../src/from";
@@ -106,16 +106,16 @@ rustfs("from", (it) => {
 
 				const anotherLocalKV = yield* makeMemoryKV();
 
-				const result = yield* Effect.either(
+				const result = yield* Effect.result(
 					fromInternal(tmpDbPath, dbName).pipe(
 						Effect.provideService(RemoteKV, remoteKV),
 						Effect.provideService(LocalKV, anotherLocalKV),
 					),
 				);
 
-				expect(result._tag).toBe("Left");
-				if (result._tag === "Left") {
-					expect(result.left).toBeInstanceOf(AlreadyExistsError);
+				expect(result._tag).toBe("Failure");
+				if (result._tag === "Failure") {
+					expect(result.failure).toBeInstanceOf(AlreadyExistsError);
 				}
 			}).pipe(Effect.provide(fileSystemLayer)),
 		),
@@ -130,17 +130,17 @@ rustfs("from", (it) => {
 
 				const nonexistentPath = `/tmp/s3qlite-from-nonexistent-${crypto.randomUUID()}.db`;
 
-				const result = yield* Effect.either(
+				const result = yield* Effect.result(
 					fromInternal(nonexistentPath, dbName).pipe(
 						Effect.provideService(RemoteKV, remoteKV),
 						Effect.provideService(LocalKV, localKV),
 					),
 				);
 
-				expect(result._tag).toBe("Left");
-				if (result._tag === "Left") {
-					expect(result.left).toBeInstanceOf(FileNotFoundError);
-					expect((result.left as FileNotFoundError).path).toBe(nonexistentPath);
+				expect(result._tag).toBe("Failure");
+				if (result._tag === "Failure") {
+					expect(result.failure).toBeInstanceOf(FileNotFoundError);
+					expect((result.failure as FileNotFoundError).path).toBe(nonexistentPath);
 				}
 			}).pipe(Effect.provide(fileSystemLayer)),
 		),

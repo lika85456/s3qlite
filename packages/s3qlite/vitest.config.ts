@@ -12,7 +12,7 @@ export const projects = [
 			hookTimeout: 60000,
 			testTimeout: 60000,
 			include: ["tests/**/*.test.ts", "src/**/*.test.ts"],
-			exclude: ["**/fuzzy*"],
+			exclude: ["**/fuzzy*", "tests/cluster/**"],
 		},
 	},
 	{
@@ -22,6 +22,7 @@ export const projects = [
 			hookTimeout: 60000,
 			testTimeout: 60000,
 			include: ["**/fuzzy*.test.ts"],
+			exclude: ["tests/cluster/**", "**/node_modules/**"],
 		},
 	},
 ];

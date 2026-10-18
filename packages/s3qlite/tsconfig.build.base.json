@@ -13,6 +13,6 @@
 		"removeComments": false,
 		"types": ["bun-types"]
 	},
-	"include": ["index.ts", "effect.ts", "src/**/*.ts"],
+	"include": ["index.ts", "effect.ts", "cluster.ts", "src/**/*.ts"],
 	"exclude": ["node_modules", "tests", "coverage", "dist", "**/*.test.ts", "vitest.config.ts"]
 }

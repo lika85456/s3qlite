@@ -53,7 +53,7 @@ const makeStaleHeadRemoteKV = (baseKV: KV, dbName: string): KV => {
 };
 
 describe("stale-head sync", () => {
-	it.scopedLive("recovers from stale head during sync via retry", () =>
+	it.live("recovers from stale head during sync via retry", () =>
 		Effect.gen(function* () {
 			const dbName = `test-${crypto.randomUUID().slice(0, 8)}`;
 			const baseRemoteKV = yield* makeMemoryKV();

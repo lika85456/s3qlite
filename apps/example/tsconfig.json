@@ -1,14 +1,7 @@
 {
-    "extends": "../../tsconfig.json",
-    "compilerOptions": {
-        "types": [
-            "bun",
-            "vitest",
-            "vitest/globals"
-        ]
-    },
-    "include": [
-        "*.ts",
-        "vitest.config.ts"
-    ]
+	"extends": "../../tsconfig.json",
+	"compilerOptions": {
+		"types": ["bun", "vitest", "vitest/globals"]
+	},
+	"include": ["*.ts", "vitest.config.ts"]
 }

@@ -8,7 +8,7 @@ import { makeMemoryKV } from "../src/kv/memoryKV";
 import { LocalKV, RemoteKV } from "../src/storage";
 
 describe("concurrent sync queue", () => {
-	it.scopedLive("queues concurrent writes during sync so they survive", () =>
+	it.live("queues concurrent writes during sync so they survive", () =>
 		Effect.gen(function* () {
 			const dbName = `test-${crypto.randomUUID().slice(0, 8)}`;
 			const remoteKV = yield* makeMemoryKV();
@@ -88,17 +88,17 @@ describe("concurrent sync queue", () => {
 			);
 
 			// Fork sync — pullFiles will block inside readStream
-			const syncFiber = yield* Effect.fork(instance2b.sync());
+			const syncFiber = yield* Effect.forkChild(instance2b.sync());
 
 			// Wait for pullFiles to hit the block (inside Effect.all, concurrently with extractBatch)
 			yield* Deferred.await(syncBlocked);
 
 			// Yield to let extractBatch fiber complete before we write to the old connection
-			yield* Effect.yieldNow();
+			yield* Effect.yieldNow;
 
 			// Concurrent write while sync is in progress. It should wait behind sync and
 			// run on the swapped live connection once sync finishes.
-			const writeFiber = yield* Effect.fork(
+			const writeFiber = yield* Effect.forkChild(
 				Effect.tryPromise(() =>
 					instance2b.run("INSERT INTO users (id, name) VALUES (?, ?)", "4", "dave"),
 				),

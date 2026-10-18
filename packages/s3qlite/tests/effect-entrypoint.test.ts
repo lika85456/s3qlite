@@ -9,6 +9,7 @@ import * as promiseApi from "../index";
 import { connect as connectPromise } from "../index";
 
 import { Rustfs, rustfs } from "./utils/rustfs";
+import { testTmpPath } from "./utils/tmp";
 
 rustfs("effect entrypoint", (it) => {
 	it("does not expose standalone fork as a package export", () => {
@@ -26,7 +27,7 @@ rustfs("effect entrypoint", (it) => {
 				const rustfsState = yield* Rustfs;
 				const bucket = rustfsState.makeBucketName("effect");
 				const dbName = rustfsState.makeDbName("effect");
-				const localDirectory = `/tmp/opencode/${dbName}`;
+				const localDirectory = testTmpPath(dbName);
 
 				yield* s3.createBucket({ Bucket: bucket });
 
@@ -60,21 +61,21 @@ rustfs("effect entrypoint", (it) => {
 				const rustfsState = yield* Rustfs;
 				const bucket = rustfsState.makeBucketName("missing");
 				const dbName = rustfsState.makeDbName("missing");
-				const localDirectory = `/tmp/opencode/${dbName}`;
+				const localDirectory = testTmpPath(dbName);
 
-				const result = yield* Effect.either(
+				const result = yield* Effect.result(
 					connect(dbName, { bucket, localDirectory }).pipe(
 						Effect.provide(fileSystemLayer),
 					),
 				);
 
-				expect(result._tag).toBe("Left");
-				if (result._tag === "Left") {
-					expect(result.left).toBeInstanceOf(BucketDoesNotExistError);
-					if (result.left instanceof BucketDoesNotExistError) {
-						expect(result.left._tag).toBe("BucketDoesNotExistError");
-						expect(result.left.bucket).toBe(bucket);
-						expect(result.left.message).toBe(`Bucket "${bucket}" does not exist`);
+				expect(result._tag).toBe("Failure");
+				if (result._tag === "Failure") {
+					expect(result.failure).toBeInstanceOf(BucketDoesNotExistError);
+					if (result.failure instanceof BucketDoesNotExistError) {
+						expect(result.failure._tag).toBe("BucketDoesNotExistError");
+						expect(result.failure.bucket).toBe(bucket);
+						expect(result.failure.message).toBe(`Bucket "${bucket}" does not exist`);
 					}
 				}
 			}),
@@ -95,7 +96,7 @@ rustfs("effect entrypoint", (it) => {
 					Effect.tryPromise(() =>
 						connectPromise(dbName, {
 							bucket,
-							localDirectory: `/tmp/opencode/${dbName}`,
+							localDirectory: testTmpPath(dbName),
 							s3: {
 								credentials: {
 									accessKeyId: rustfsState.accessKey,

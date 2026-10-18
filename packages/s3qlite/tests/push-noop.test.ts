@@ -9,7 +9,7 @@ import type { Head, StoredHead } from "../src/types";
 
 import { makeRustfsRemoteKV, rustfs } from "./utils/rustfs";
 
-const getStoredHead = (dbName: string, kv: LocalKV["Type"]) =>
+const getStoredHead = (dbName: string, kv: (typeof LocalKV)["Service"]) =>
 	getJson<StoredHead>(kv, headKey(dbName)).pipe(
 		Effect.flatMap(
 			Option.match({
@@ -19,7 +19,7 @@ const getStoredHead = (dbName: string, kv: LocalKV["Type"]) =>
 		),
 	);
 
-const getRemoteHead = (dbName: string, kv: RemoteKV["Type"]) =>
+const getRemoteHead = (dbName: string, kv: (typeof RemoteKV)["Service"]) =>
 	getJson<Head>(kv, headKey(dbName)).pipe(
 		Effect.flatMap(
 			Option.match({

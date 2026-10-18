@@ -13,15 +13,17 @@ export type ConnectionConfigValue = {
 	readonly options: ConnectionOptions;
 };
 
-export class ConnectionConfig extends Context.Tag("s3qlite/ConnectionConfig")<
-	ConnectionConfig,
-	ConnectionConfigValue
->() {}
+export class ConnectionConfig extends Context.Service<ConnectionConfig, ConnectionConfigValue>()(
+	"s3qlite/ConnectionConfig",
+) {}
 
-export class ConnectionState extends Context.Tag("s3qlite/ConnectionState")<
+export class ConnectionState extends Context.Service<
 	ConnectionState,
 	{
 		readonly getConnection: Effect.Effect<Database>;
+		/**
+		 * Replaces the live connection. The caller is responsible for closing the previous one.
+		 */
 		readonly setConnection: (connection: Database) => Effect.Effect<void>;
 	}
->() {}
+>()("s3qlite/ConnectionState") {}

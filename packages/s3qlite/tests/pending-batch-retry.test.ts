@@ -44,6 +44,7 @@ const makeFaultyRemoteKV = (inner: KV): KV => {
 		delete: inner.delete,
 		readStream: inner.readStream,
 		writeStream: inner.writeStream,
+		create: inner.create,
 		cas: (key, value, etag) => {
 			if (failNext) {
 				failNext = false;

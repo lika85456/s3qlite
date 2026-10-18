@@ -22,7 +22,7 @@ export class CliError extends Data.TaggedError("CliError")<{
 const emptyConfig: Config = { aliases: {}, version: 1 };
 
 const isAlias = (value: unknown): value is Alias => {
-	if (typeof value !== "object" || Option.isNone(Option.fromNullable(value))) {
+	if (typeof value !== "object" || Option.isNone(Option.fromNullishOr(value))) {
 		return false;
 	}
 
@@ -42,12 +42,12 @@ const parseConfig = (text: string, path: string): Effect.Effect<Config, CliError
 		catch: () => new CliError({ message: `invalid config file "${path}"` }),
 	}).pipe(
 		Effect.flatMap((value) => {
-			if (typeof value !== "object" || Option.isNone(Option.fromNullable(value))) {
+			if (typeof value !== "object" || Option.isNone(Option.fromNullishOr(value))) {
 				return Effect.fail(new CliError({ message: `invalid config file "${path}"` }));
 			}
 
 			const config = value as { aliases?: unknown; version?: unknown };
-			const aliases = Option.fromNullable(config.aliases);
+			const aliases = Option.fromNullishOr(config.aliases);
 			if (
 				config.version !== 1 ||
 				typeof config.aliases !== "object" ||
@@ -67,8 +67,8 @@ export const readConfig = (directory: string): Effect.Effect<Config, CliError> =
 		try: () => readFile(path, "utf8"),
 		catch: (error) => ({ error }),
 	}).pipe(
-		Effect.catchAll(({ error }) => {
-			const cause = Option.fromNullable(error);
+		Effect.catch(({ error }) => {
+			const cause = Option.fromNullishOr(error);
 			return typeof error === "object" &&
 				Option.isSome(cause) &&
 				"code" in cause.value &&

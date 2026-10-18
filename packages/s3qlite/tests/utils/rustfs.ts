@@ -2,22 +2,23 @@
  * This is completely vibecoded, its a miracle it even works
  */
 import { S3 } from "@effect-aws/client-s3";
-import * as BunContext from "@effect/platform-bun/BunContext";
-import * as Command from "@effect/platform/Command";
 import { layer as withLayer } from "@effect/vitest";
 import { Context, Effect, Layer, Option, Schedule } from "effect";
+import { execFile } from "node:child_process";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { dirname } from "node:path";
 
 import { makeS3KV } from "../../src/kv/s3KV";
 
+import { testTmpPath } from "./tmp";
+
 const accessKey = "test-access-key";
 const secretKey = "test-secret-key";
 const image = "rustfs/rustfs:latest";
 const region = "us-east-1";
-const rustfsStateFile = "/tmp/opencode/s3qlite-rustfs.json";
-const rustfsStateLockDirectory = "/tmp/opencode/s3qlite-rustfs.lock";
+const rustfsStateFile = testTmpPath("s3qlite-rustfs.json");
+const rustfsStateLockDirectory = testTmpPath("s3qlite-rustfs.lock");
 const rustfsStateLockOwnerFile = `${rustfsStateLockDirectory}/pid`;
 const rustfsStateLockStaleMs = 2_000;
 const rustfsStateLockTimeoutMs = 60_000;
@@ -41,16 +42,29 @@ export type RustfsService = {
 	readonly makeDbName: (prefix?: string) => string;
 } & RustfsState;
 
-export class Rustfs extends Context.Tag("@template/s3qlite/tests/Rustfs")<
-	Rustfs,
-	RustfsService
->() {}
+export class Rustfs extends Context.Service<Rustfs, RustfsService>()(
+	"@template/s3qlite/tests/Rustfs",
+) {}
+
+const run = (command: string, args: readonly string[]) =>
+	Effect.callback<{ readonly code: number; readonly stdout: string }, Error>((resume) => {
+		execFile(command, [...args], (error, stdout) => {
+			const code = error ? (typeof error.code === "number" ? error.code : 1) : 0;
+			if (error && typeof error.code !== "number") {
+				resume(Effect.fail(new Error(`${command} failed to start: ${error.message}`)));
+				return;
+			}
+			resume(Effect.succeed({ code, stdout }));
+		});
+	});
 
 const docker = (...args: string[]) =>
-	Command.make("docker", ...args).pipe(
-		Command.string,
-		Effect.provide(BunContext.layer),
-		Effect.map((output) => output.trim()),
+	run("docker", args).pipe(
+		Effect.flatMap(({ code, stdout }) =>
+			code === 0
+				? Effect.succeed(stdout.trim())
+				: Effect.fail(new Error(`docker ${args.join(" ")} exited with ${code}`)),
+		),
 	);
 
 const reservePort = Effect.tryPromise({
@@ -155,7 +169,7 @@ const withStateLock = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A
 			Effect.tryPromise({
 				try: () => rm(rustfsStateLockDirectory, { force: true, recursive: true }),
 				catch: (error) => new Error(`Failed to release RustFS state lock ${String(error)}`),
-			}).pipe(Effect.catchAll(() => Effect.void)),
+			}).pipe(Effect.catch(() => Effect.void)),
 	);
 
 const isProcessAlive = (pid: number): boolean => {
@@ -207,28 +221,22 @@ const writeSharedState = (state: SharedRustfsState) =>
 const removeStateFile = Effect.tryPromise({
 	try: () => rm(rustfsStateFile, { force: true }),
 	catch: (error) => new Error(`Failed to remove RustFS state ${String(error)}`),
-}).pipe(Effect.catchAll(() => Effect.void));
+}).pipe(Effect.catch(() => Effect.void));
 
 const waitForReady = ({ name, port }: { name: string; port: number }) =>
 	Effect.gen(function* () {
-		const ready = yield* Command.make(
-			"curl",
-			"-fsS",
-			`http://127.0.0.1:${port}/health/ready`,
-		).pipe(Command.exitCode, Effect.provide(BunContext.layer));
+		const ready = yield* run("curl", ["-fsS", `http://127.0.0.1:${port}/health/ready`]);
 
-		if (ready === 0) {
+		if (ready.code === 0) {
 			return;
 		}
 
 		const status = yield* docker("inspect", "--format", "{{.State.Status}}", name).pipe(
-			Effect.catchAll(() => Effect.succeed("missing")),
+			Effect.catch(() => Effect.succeed("missing")),
 		);
 
 		if (status === "exited" || status === "dead" || status === "missing") {
-			const logs = yield* docker("logs", name).pipe(
-				Effect.catchAll(() => Effect.succeed("")),
-			);
+			const logs = yield* docker("logs", name).pipe(Effect.catch(() => Effect.succeed("")));
 			return yield* Effect.fail(
 				new Error(`RustFS exited before becoming ready${logs === "" ? "" : `\n${logs}`}`),
 			);
@@ -237,13 +245,14 @@ const waitForReady = ({ name, port }: { name: string; port: number }) =>
 		return yield* Effect.fail(new Error(`RustFS is not ready on 127.0.0.1:${port}`));
 	}).pipe(
 		Effect.retry(Schedule.spaced("500 millis")),
-		Effect.timeoutFail({
+		Effect.timeoutOrElse({
 			duration: "45 seconds",
-			onTimeout: () => new Error(`RustFS did not become ready on 127.0.0.1:${port} in time`),
+			orElse: () =>
+				Effect.fail(new Error(`RustFS did not become ready on 127.0.0.1:${port} in time`)),
 		}),
 	);
 const loadState = readState.pipe(
-	Effect.catchAll((error) =>
+	Effect.catch((error) =>
 		Option.match(cachedState, {
 			onNone: () => Effect.fail(error),
 			onSome: Effect.succeed,
@@ -251,7 +260,7 @@ const loadState = readState.pipe(
 	),
 );
 
-export const RustfsLive = Layer.unwrapEffect(
+export const RustfsLive = Layer.unwrap(
 	loadState.pipe(
 		Effect.map((state) => {
 			const service = {
@@ -303,7 +312,7 @@ export const setupRustfs = async (): Promise<void> => {
 							port: getPort(state.endpoint),
 						}).pipe(
 							Effect.as(true),
-							Effect.catchAll(() => Effect.succeed(false)),
+							Effect.catch(() => Effect.succeed(false)),
 						)
 					) {
 						const liveOwners = state.owners.filter(isProcessAlive);
@@ -317,7 +326,7 @@ export const setupRustfs = async (): Promise<void> => {
 					}
 
 					yield* docker("rm", "-f", state.containerName).pipe(
-						Effect.catchAll(() => Effect.void),
+						Effect.catch(() => Effect.void),
 						Effect.asVoid,
 					);
 					yield* removeStateFile;
@@ -356,7 +365,7 @@ export const setupRustfs = async (): Promise<void> => {
 				).pipe(
 					Effect.tapError(() =>
 						docker("rm", "-f", containerName).pipe(
-							Effect.catchAll(() => Effect.void),
+							Effect.catch(() => Effect.void),
 							Effect.asVoid,
 						),
 					),
@@ -371,7 +380,7 @@ export const setupRustfs = async (): Promise<void> => {
 					region,
 					secretKey,
 				});
-			}).pipe(Effect.provide(BunContext.layer)),
+			}),
 		),
 	);
 };
@@ -400,7 +409,7 @@ export const teardownRustfs = async (): Promise<void> => {
 				}
 
 				yield* docker("rm", "-f", state.containerName).pipe(
-					Effect.catchAll(() => Effect.void),
+					Effect.catch(() => Effect.void),
 					Effect.asVoid,
 				);
 				yield* removeStateFile;

@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { copyFile, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -78,7 +78,8 @@ const distPackageJson = {
 	sideEffects: false,
 	dependencies: packageJson.dependencies,
 	peerDependencies: packageJson.peerDependencies,
-	main: "./cjs/index.js",
+	peerDependenciesMeta: packageJson.peerDependenciesMeta,
+	main: "./esm/index.js",
 	module: "./esm/index.js",
 	types: "./dts/index.d.ts",
 	exports: {
@@ -86,12 +87,19 @@ const distPackageJson = {
 		".": {
 			types: "./dts/index.d.ts",
 			import: "./esm/index.js",
-			default: "./cjs/index.js",
+			// effect v4 and @effect-aws/client-s3 v2 are ESM-only, so there is no CommonJS build.
+			// CommonJS consumers load this ESM build through require(esm) (Node >= 20.19 / 22.12).
+			default: "./esm/index.js",
 		},
 		"./effect": {
 			types: "./dts/effect.d.ts",
 			import: "./esm/effect.js",
-			default: "./cjs/effect.js",
+			default: "./esm/effect.js",
+		},
+		"./cluster": {
+			types: "./dts/cluster.d.ts",
+			import: "./esm/cluster.js",
+			default: "./esm/cluster.js",
 		},
 	},
 };
@@ -102,11 +110,6 @@ for (const folder of ["esm", "dts"]) {
 	await walk(path.join(fileURLToPath(distPath), folder));
 }
 
-await mkdir(new URL("../dist/cjs/", import.meta.url), { recursive: true });
-await writeFile(
-	new URL("../dist/cjs/package.json", import.meta.url),
-	'{\n\t"type": "commonjs"\n}\n',
-);
 await copyFile(
 	new URL("../../../README.md", import.meta.url),
 	new URL("../dist/README.md", import.meta.url),

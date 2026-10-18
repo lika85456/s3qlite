@@ -102,10 +102,10 @@ export const applyBatch = (
 				);
 				yield* Effect.tryPromise(() => database.exec("COMMIT")).pipe(Effect.asVoid);
 			}).pipe(
-				Effect.catchAll((error) =>
+				Effect.catch((error) =>
 					Effect.tryPromise(() => database.exec("ROLLBACK")).pipe(
 						Effect.asVoid,
-						Effect.catchAll(() => Effect.void),
+						Effect.catch(() => Effect.void),
 						Effect.andThen(Effect.fail(error)),
 					),
 				),

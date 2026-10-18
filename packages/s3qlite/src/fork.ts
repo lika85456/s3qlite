@@ -41,5 +41,16 @@ export const fork = (
 			);
 		}
 
-		yield* remoteKV.set(headKey(nextDbName), sourceHead.value.value);
+		// Owner-mode garbage collection of the source keeps objects that forks reference.
+		yield* remoteKV.set(`${dbName}.forks/${nextDbName}`, new Uint8Array());
+		yield* remoteKV.create(headKey(nextDbName), sourceHead.value.value).pipe(
+			Effect.catchTag("ConflictError", () =>
+				Effect.fail(
+					new AlreadyExistsError({
+						dbName: nextDbName,
+						message: `Database "${nextDbName}" already exists`,
+					}),
+				),
+			),
+		);
 	});

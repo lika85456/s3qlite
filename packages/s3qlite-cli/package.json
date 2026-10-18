@@ -1,6 +1,6 @@
 {
 	"name": "@lika85456/s3qlite-cli",
-	"version": "0.1.2",
+	"version": "0.2.0-next.0",
 	"license": "MIT",
 	"bin": {
 		"s3qlite": "./dist/cli.js"
@@ -20,17 +20,15 @@
 		"check-types": "tsgo --noEmit"
 	},
 	"dependencies": {
-		"@effect-aws/client-s3": "^1.11.0",
-		"@effect/cli": "0.75.0",
-		"@effect/platform": "^0.96.0",
-		"@effect/platform-node": "^0.106.0",
-		"@tursodatabase/database": "^0.6.0",
-		"effect": "^3.21.2"
+		"@effect-aws/client-s3": "^2.0.0",
+		"@effect/platform-node": "^4.0.5",
+		"@tursodatabase/database": "^0.8.3",
+		"effect": "^4.0.5"
 	},
 	"devDependencies": {
-		"@effect/vitest": "^0.29.0",
+		"@effect/vitest": "^4.0.5",
 		"@lika85456/s3qlite": "workspace:*",
 		"@types/node": "^24.0.0",
-		"vitest": "^4.1.9"
+		"vitest": "^5.0.5"
 	}
 }

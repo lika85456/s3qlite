@@ -12,7 +12,7 @@ import type { Head } from "../src/types";
 
 import { makeRustfsRemoteKV, rustfs } from "./utils/rustfs";
 
-const getRemoteHead = (dbName: string, kv: RemoteKV["Type"]) =>
+const getRemoteHead = (dbName: string, kv: (typeof RemoteKV)["Service"]) =>
 	getJson<Head>(kv, headKey(dbName)).pipe(
 		Effect.flatMap(
 			Option.match({
@@ -135,13 +135,13 @@ rustfs("fork", (it) => {
 					(instance) => Effect.tryPromise(() => instance.close()).pipe(Effect.orDie),
 				);
 
-				const result = yield* Effect.either(db.fork(dbName));
-				expect(result._tag).toBe("Left");
-				if (result._tag === "Left") {
-					expect(result.left).toBeInstanceOf(SameNameError);
-					expect(result.left._tag).toBe("SameNameError");
-					expect(result.left.dbName).toBe(dbName);
-					expect(result.left.message).toBe(
+				const result = yield* Effect.result(db.fork(dbName));
+				expect(result._tag).toBe("Failure");
+				if (result._tag === "Failure") {
+					expect(result.failure).toBeInstanceOf(SameNameError);
+					expect(result.failure._tag).toBe("SameNameError");
+					expect(result.failure.dbName).toBe(dbName);
+					expect(result.failure.message).toBe(
 						`Cannot fork database "${dbName}" into itself`,
 					);
 				}
@@ -180,13 +180,15 @@ rustfs("fork", (it) => {
 				yield* source.push();
 				yield* target.push();
 
-				const result = yield* Effect.either(source.fork(targetDbName));
-				expect(result._tag).toBe("Left");
-				if (result._tag === "Left") {
-					expect(result.left).toBeInstanceOf(AlreadyExistsError);
-					expect(result.left._tag).toBe("AlreadyExistsError");
-					expect(result.left.dbName).toBe(targetDbName);
-					expect(result.left.message).toBe(`Database "${targetDbName}" already exists`);
+				const result = yield* Effect.result(source.fork(targetDbName));
+				expect(result._tag).toBe("Failure");
+				if (result._tag === "Failure") {
+					expect(result.failure).toBeInstanceOf(AlreadyExistsError);
+					expect(result.failure._tag).toBe("AlreadyExistsError");
+					expect(result.failure.dbName).toBe(targetDbName);
+					expect(result.failure.message).toBe(
+						`Database "${targetDbName}" already exists`,
+					);
 				}
 			}).pipe(Effect.provide(fileSystemLayer)),
 		),
@@ -198,7 +200,7 @@ rustfs("fork", (it) => {
 				const dbName = `fork-missing-${crypto.randomUUID().slice(0, 8)}`;
 				const remoteKV = yield* makeRustfsRemoteKV("fork-missing");
 				const targetDbName = `fork-target-${crypto.randomUUID().slice(0, 8)}`;
-				const result = yield* Effect.either(
+				const result = yield* Effect.result(
 					runFork(targetDbName).pipe(
 						Effect.provideService(RemoteKV, remoteKV),
 						Effect.provideService(ConnectionConfig, {
@@ -212,12 +214,14 @@ rustfs("fork", (it) => {
 					),
 				);
 
-				expect(result._tag).toBe("Left");
-				if (result._tag === "Left") {
-					expect(result.left).toBeInstanceOf(SourceDoesNotExistError);
-					expect(result.left._tag).toBe("SourceDoesNotExistError");
-					expect(result.left.dbName).toBe(dbName);
-					expect(result.left.message).toBe(`Source database "${dbName}" does not exist`);
+				expect(result._tag).toBe("Failure");
+				if (result._tag === "Failure") {
+					expect(result.failure).toBeInstanceOf(SourceDoesNotExistError);
+					expect(result.failure._tag).toBe("SourceDoesNotExistError");
+					expect(result.failure.dbName).toBe(dbName);
+					expect(result.failure.message).toBe(
+						`Source database "${dbName}" does not exist`,
+					);
 				}
 			}).pipe(Effect.provide(fileSystemLayer)),
 		),

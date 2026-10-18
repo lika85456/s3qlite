@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 
 import { S3 } from "@effect-aws/client-s3";
-import { Args, Command, Options, Prompt } from "@effect/cli";
-import { NodeContext, NodeRuntime } from "@effect/platform-node";
+import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { connect, makeS3KV } from "@lika85456/s3qlite";
 import type { Head } from "@lika85456/s3qlite";
 import { Console, Effect, Option, Redacted, Stream } from "effect";
+import { Argument, Command, Flag, Prompt } from "effect/cli";
 import { realpathSync } from "node:fs";
 import { rm } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -30,16 +30,18 @@ type BucketTarget = {
 };
 
 const defaultDirectory = join(homedir(), ".s3qlite");
-const configDirectory = Options.text("config-dir").pipe(
-	Options.withDescription("Directory containing CLI alias configuration"),
-	Options.withDefault(defaultDirectory),
+const configDirectory = Flag.String("config-dir").pipe(
+	Flag.withDescription("Directory containing CLI alias configuration"),
+	Flag.withDefault(defaultDirectory),
 );
-const dataDirectory = Options.text("data-dir").pipe(
-	Options.withDescription("Directory for local database files"),
-	Options.withDefault(join(defaultDirectory, "data")),
+const dataDirectory = Flag.String("data-dir").pipe(
+	Flag.withDescription("Directory for local database files"),
+	Flag.withDefault(join(defaultDirectory, "data")),
 );
 
-const root = Command.make("s3qlite", { configDirectory, dataDirectory });
+const root = Command.make("s3qlite").pipe(
+	Command.withSharedFlags({ configDirectory, dataDirectory }),
+);
 
 const parseTarget = (value: string): Effect.Effect<Target, CliError> => {
 	const parts = value.split("/");
@@ -92,13 +94,13 @@ const resolveS3Config = (bucket: string, alias: Alias) => {
 		);
 
 	return probe(false).pipe(
-		Effect.catchAll(() => probe(true)),
+		Effect.catch(() => probe(true)),
 		Effect.mapError(() => new CliError({ message: `failed to access bucket "${bucket}"` })),
 	);
 };
 
 const isMissingObject = (error: unknown): boolean => {
-	if (typeof error !== "object" || Option.isNone(Option.fromNullable(error))) {
+	if (typeof error !== "object" || Option.isNone(Option.fromNullishOr(error))) {
 		return false;
 	}
 
@@ -107,7 +109,7 @@ const isMissingObject = (error: unknown): boolean => {
 		return true;
 	}
 
-	const metadata = Option.fromNullable(value.$metadata);
+	const metadata = Option.fromNullishOr(value.$metadata);
 	return Option.exists(
 		metadata,
 		(current) =>
@@ -124,13 +126,13 @@ const databaseExists = (
 ) =>
 	Effect.gen(function* () {
 		const s3 = yield* S3;
-		const result = yield* Effect.either(
+		const result = yield* Effect.result(
 			s3.headObject({ Bucket: bucket, Key: `${database}.json` }),
 		);
-		if (result._tag === "Right") {
+		if (result._tag === "Success") {
 			return true;
 		}
-		if (isMissingObject(result.left)) {
+		if (isMissingObject(result.failure)) {
 			return false;
 		}
 		return yield* Effect.fail(new CliError({ message: `failed to access bucket "${bucket}"` }));
@@ -218,7 +220,7 @@ const forkAcrossBuckets = (
 			}
 			yield* destinationRemote.writeStream(key, object.value);
 		}
-		yield* destinationRemote.set(`${destination.database}.json`, sourceHead.value.value);
+		yield* destinationRemote.create(`${destination.database}.json`, sourceHead.value.value);
 	}).pipe(
 		Effect.mapError((error) =>
 			error instanceof CliError
@@ -229,25 +231,25 @@ const forkAcrossBuckets = (
 		),
 	);
 
-const aliasName = Args.text({ name: "alias" }).pipe(Args.withDescription("Alias name"));
-const endpoint = Args.text({ name: "url" }).pipe(
-	Args.withDescription("S3-compatible endpoint URL"),
+const aliasName = Argument.String("alias").pipe(Argument.withDescription("Alias name"));
+const endpoint = Argument.String("url").pipe(
+	Argument.withDescription("S3-compatible endpoint URL"),
 );
-const accessKey = Args.text({ name: "access-key" }).pipe(
-	Args.withDescription("S3 access key"),
-	Args.optional,
+const accessKey = Argument.String("access-key").pipe(
+	Argument.withDescription("S3 access key"),
+	Argument.optional,
 );
-const secretKey = Args.redacted({ name: "secret-key" }).pipe(
-	Args.withDescription("S3 secret key"),
-	Args.optional,
+const secretKey = Argument.Redacted("secret-key").pipe(
+	Argument.withDescription("S3 secret key"),
+	Argument.optional,
 );
-const region = Options.text("region").pipe(
-	Options.withDescription("S3 region"),
-	Options.withDefault("us-east-1"),
+const region = Flag.String("region").pipe(
+	Flag.withDescription("S3 region"),
+	Flag.withDefault("us-east-1"),
 );
-const pathStyle = Options.choice("path", ["auto", "on", "off"] as const).pipe(
-	Options.withDescription("Use path-style S3 URLs"),
-	Options.withDefault("auto" as const),
+const pathStyle = Flag.Literals("path", ["auto", "on", "off"] as const).pipe(
+	Flag.withDescription("Use path-style S3 URLs"),
+	Flag.withDefault("auto" as const),
 );
 
 const aliasSet = Command.make(
@@ -268,10 +270,10 @@ const aliasSet = Command.make(
 
 			const resolvedAccessKey = Option.isSome(accessKey)
 				? accessKey.value
-				: yield* Prompt.run(Prompt.text({ message: "Access Key" }));
+				: yield* Prompt.run(Prompt.String({ message: "Access Key" }));
 			const resolvedSecretKey = Option.isSome(secretKey)
 				? secretKey.value
-				: yield* Prompt.run(Prompt.hidden({ message: "Secret Key" }));
+				: yield* Prompt.run(Prompt.Hidden({ message: "Secret Key" }));
 			const updated = yield* setAlias(configDirectory, aliasName, {
 				accessKey: resolvedAccessKey,
 				endpoint,
@@ -307,8 +309,8 @@ const aliasCommand = Command.make("alias").pipe(
 	Command.withSubcommands([aliasSet, aliasList, aliasRemove]),
 );
 
-const targetArgument = Args.text({ name: "ALIAS/BUCKET/DATABASE" }).pipe(
-	Args.withDescription("Database target"),
+const targetArgument = Argument.String("ALIAS/BUCKET/DATABASE").pipe(
+	Argument.withDescription("Database target"),
 );
 
 const createCommand = Command.make("create", { value: targetArgument }, ({ value }) =>
@@ -327,8 +329,8 @@ const createCommand = Command.make("create", { value: targetArgument }, ({ value
 	}),
 );
 
-const bucketArgument = Args.text({ name: "ALIAS/BUCKET" }).pipe(
-	Args.withDescription("Bucket containing database heads"),
+const bucketArgument = Argument.String("ALIAS/BUCKET").pipe(
+	Argument.withDescription("Bucket containing database heads"),
 );
 const listCommand = Command.make("ls", { value: bucketArgument }, ({ value }) =>
 	Effect.gen(function* () {
@@ -339,15 +341,15 @@ const listCommand = Command.make("ls", { value: bucketArgument }, ({ value }) =>
 			Effect.flatMap((s3) =>
 				s3.listObjectsV2Stream({ Bucket: target.bucket }).pipe(
 					Stream.flatMap((page) => Stream.fromIterable(page.Contents ?? [])),
-					Stream.filterMap((object) =>
-						Option.filter(Option.fromNullable(object.Key), (key) =>
-							key.endsWith(".json"),
-						),
-					),
 					Stream.runCollect,
 				),
 			),
-			Effect.map((keys) => Array.from(keys).sort()),
+			Effect.map((objects) =>
+				objects
+					.flatMap((object) => Option.toArray(Option.fromNullishOr(object.Key)))
+					.filter((key) => key.endsWith(".json"))
+					.sort(),
+			),
 			Effect.mapError(
 				() => new CliError({ message: `failed to access bucket "${target.bucket}"` }),
 			),
@@ -357,7 +359,10 @@ const listCommand = Command.make("ls", { value: bucketArgument }, ({ value }) =>
 	}),
 );
 
-const force = Options.boolean("force").pipe(Options.withDescription("Confirm database removal"));
+const force = Flag.Boolean("force").pipe(
+	Flag.withDescription("Confirm database removal"),
+	Flag.withDefault(false),
+);
 const removeCommand = Command.make("remove", { force, value: targetArgument }, ({ force, value }) =>
 	Effect.gen(function* () {
 		if (!force) {
@@ -393,11 +398,11 @@ const removeCommand = Command.make("remove", { force, value: targetArgument }, (
 	}),
 );
 
-const sourceArgument = Args.text({ name: "source" }).pipe(
-	Args.withDescription("Existing database target"),
+const sourceArgument = Argument.String("source").pipe(
+	Argument.withDescription("Existing database target"),
 );
-const destinationArgument = Args.text({ name: "target" }).pipe(
-	Args.withDescription("New database target"),
+const destinationArgument = Argument.String("target").pipe(
+	Argument.withDescription("New database target"),
 );
 const forkCommand = Command.make(
 	"fork",
@@ -479,9 +484,9 @@ const pullCommand = makeSyncCommand("pull");
 const pushCommand = makeSyncCommand("push");
 const syncCommand = makeSyncCommand("sync");
 
-const sqlArgument = Args.text({ name: "sql" }).pipe(
-	Args.withDescription("SQL statement, or read from stdin when omitted"),
-	Args.optional,
+const sqlArgument = Argument.String("sql").pipe(
+	Argument.withDescription("SQL statement, or read from stdin when omitted"),
+	Argument.optional,
 );
 
 const readInput = (input: Readable): Effect.Effect<string, CliError> =>
@@ -571,12 +576,8 @@ const makeCommand = (input: Readable) =>
 
 export const runCli = (args: readonly string[], input: Readable = process.stdin) =>
 	Console.consoleWith((console) =>
-		Console.withConsole(
-			Command.run(makeCommand(input), {
-				name: "S3Qlite CLI",
-				version: "0.1.0",
-			})(args),
-			{
+		Command.runWith(makeCommand(input), { version: "0.1.0" })(args.slice(2)).pipe(
+			Effect.provideService(Console.Console, {
 				...console,
 				log: (...values) =>
 					console.log(
@@ -584,18 +585,18 @@ export const runCli = (args: readonly string[], input: Readable = process.stdin)
 							typeof value === "string" ? value.replaceAll(/\n{2,}/g, "\n") : value,
 						),
 					),
-			},
+			}),
 		),
 	).pipe(
-		Effect.catchAll((error) => {
+		Effect.catch((error) => {
 			const message = error instanceof CliError ? error.message : String(error);
-			return Console.error(`error: ${message}`).pipe(Effect.zipRight(Effect.fail(error)));
+			return Console.error(`error: ${message}`).pipe(Effect.andThen(Effect.fail(error)));
 		}),
 	);
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === realpathSync(process.argv[1])) {
 	runCli(process.argv).pipe(
-		Effect.provide(NodeContext.layer),
+		Effect.provide(NodeServices.layer),
 		NodeRuntime.runMain({ disableErrorReporting: true }),
 	);
 }

@@ -10,8 +10,8 @@ import type { StoredHead } from "../src/types";
 
 const openDatabase = (
 	dbName: string,
-	remoteKV: RemoteKV["Type"],
-	localKV: LocalKV["Type"],
+	remoteKV: (typeof RemoteKV)["Service"],
+	localKV: (typeof LocalKV)["Service"],
 	options = {},
 ) =>
 	Effect.acquireRelease(
@@ -23,7 +23,7 @@ const openDatabase = (
 	);
 
 describe("sync modes", () => {
-	it.scoped("defaults to manual and never syncs implicitly", () =>
+	it.effect("defaults to manual and never syncs implicitly", () =>
 		Effect.gen(function* () {
 			const dbName = `mode-${crypto.randomUUID().slice(0, 8)}`;
 			const remoteKV = yield* makeMemoryKV();
@@ -69,7 +69,7 @@ describe("sync modes", () => {
 		}).pipe(Effect.provide(fileSystemLayer)),
 	);
 
-	it.scoped("push-on-change pushes local writes but never pulls implicitly", () =>
+	it.effect("push-on-change pushes local writes but never pulls implicitly", () =>
 		Effect.gen(function* () {
 			const dbName = `mode-${crypto.randomUUID().slice(0, 8)}`;
 			const remoteKV = yield* makeMemoryKV();
@@ -111,7 +111,7 @@ describe("sync modes", () => {
 		}).pipe(Effect.provide(fileSystemLayer)),
 	);
 
-	it.scoped("transaction mode pulls before reads and pushes after write changes", () =>
+	it.effect("transaction mode pulls before reads and pushes after write changes", () =>
 		Effect.gen(function* () {
 			const dbName = `mode-${crypto.randomUUID().slice(0, 8)}`;
 			const remoteKV = yield* makeMemoryKV();
@@ -166,7 +166,7 @@ describe("sync modes", () => {
 		}).pipe(Effect.provide(fileSystemLayer)),
 	);
 
-	it.scoped("interval mode syncs periodically", () =>
+	it.live("interval mode syncs periodically", () =>
 		Effect.gen(function* () {
 			vi.useFakeTimers();
 			yield* Effect.addFinalizer(() => Effect.sync(() => vi.useRealTimers()));

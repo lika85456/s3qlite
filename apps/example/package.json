@@ -10,10 +10,10 @@
 		"test:ci": "vitest run --config vitest.config.ts"
 	},
 	"dependencies": {
-		"@effect-aws/client-s3": "^1.11.0",
-		"@effect/platform-node": "^0.106.0",
+		"@effect-aws/client-s3": "^2.0.0",
+		"@effect/platform-node": "^4.0.5",
 		"@lika85456/s3qlite": "workspace:*",
 		"dotenv": "^16.4.7",
-		"effect": "^3.21.2"
+		"effect": "^4.0.5"
 	}
 }

@@ -1,6 +1,6 @@
-import { FileSystem } from "@effect/platform/FileSystem";
 import { Effect } from "effect";
 import type { Scope } from "effect";
+import { FileSystem } from "effect/FileSystem";
 
 import { makeFileKV } from "./fileKV";
 import type { CloneTrait, ConnectDatabaseTrait, KV } from "./kv";

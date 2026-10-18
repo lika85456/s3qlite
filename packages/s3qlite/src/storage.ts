@@ -1,16 +1,16 @@
 import { Context, Effect, Option } from "effect";
 
 import type { CloneTrait, ConnectDatabaseTrait, KV } from "./kv/kv";
+import type { Head } from "./types";
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 
-export class LocalKV extends Context.Tag("s3qlite/LocalKV")<
-	LocalKV,
-	KV & CloneTrait & ConnectDatabaseTrait
->() {}
+export class LocalKV extends Context.Service<LocalKV, KV & CloneTrait & ConnectDatabaseTrait>()(
+	"s3qlite/LocalKV",
+) {}
 
-export class RemoteKV extends Context.Tag("s3qlite/RemoteKV")<RemoteKV, KV>() {}
+export class RemoteKV extends Context.Service<RemoteKV, KV>()("s3qlite/RemoteKV") {}
 
 export const headKey = (dbName: string): string => `${dbName}.json`;
 
@@ -26,6 +26,31 @@ export const shmKey = (dbName: string): string => `${dbName}.db-shm`;
 
 export const baseKey = (snapshotId: string, batchId: string): string =>
 	`${snapshotId}-${batchId}.base`;
+
+/**
+ * Stored head written during a pull before the live database is switched. Its presence marks the
+ * pull as committed: recovery rolls the publication forward.
+ */
+export const pendingHeadKey = (dbName: string): string => `${dbName}.json.pending`;
+
+/**
+ * Fully built and checkpointed replacement for the live database, waiting to be renamed over it.
+ */
+export const stagedDbKey = (dbName: string): string => `${dbName}.db.staged`;
+
+/**
+ * Local file holding the database state at the end of `head` without local changes. A head with
+ * no batches after its latest snapshot uses the snapshot itself.
+ */
+export const rollbackBaseKey = (head: Head): Option.Option<string> =>
+	Option.fromNullishOr(head.snapshots.at(-1)).pipe(
+		Option.map((snapshot) => {
+			const lastBatchId = head.batches.at(-1)?.id;
+			return !lastBatchId || lastBatchId === snapshot.batchIdsApplied.at(-1)
+				? snapshotKey(snapshot.id)
+				: baseKey(snapshot.id, lastBatchId);
+		}),
+	);
 
 export const encodeJson = <A>(value: A): Uint8Array => textEncoder.encode(JSON.stringify(value));
 

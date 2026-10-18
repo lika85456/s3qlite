@@ -1,87 +1,78 @@
 import { S3 } from "@effect-aws/client-s3";
-import { Chunk, Data, Effect, Option, Stream } from "effect";
+import { Data, Effect, Option, Predicate, Stream } from "effect";
 
 import { ConflictError } from "./kv";
-import type { KV } from "./kv";
+import type { KV, ListedObject } from "./kv";
 
 export class BucketDoesNotExistError extends Data.TaggedError("BucketDoesNotExistError")<{
 	readonly bucket: string;
 	readonly message: string;
 }> {}
 
-const isNotModifiedError = (error: unknown): boolean => {
+type S3ErrorShape = {
+	readonly _tag?: unknown;
+	readonly Code?: unknown;
+	readonly name?: unknown;
+	readonly $metadata?: { readonly httpStatusCode?: unknown };
+};
+
+type S3ErrorKind = { readonly statuses: readonly number[]; readonly names: readonly string[] };
+
+const notModified: S3ErrorKind = { statuses: [304], names: ["NotModified"] };
+const missingObject: S3ErrorKind = { statuses: [404], names: ["NoSuchKey", "NotFound"] };
+const missingBucket: S3ErrorKind = { statuses: [404], names: ["NoSuchBucket", "NotFound"] };
+/** Some S3 implementations answer a concurrent conditional write with 409 instead of 412. */
+const conditionalConflict: S3ErrorKind = {
+	statuses: [409, 412],
+	names: ["PreconditionFailed", "ConditionalRequestConflict"],
+};
+
+/**
+ * `@effect-aws` keeps only the error names it declares for each command and turns every other
+ * service exception into `SdkError`, so the HTTP status is checked as well as the name.
+ */
+const isS3Error = (error: unknown, kind: S3ErrorKind): boolean => {
 	if (typeof error !== "object") {
 		return false;
 	}
 
-	const errorOption = Option.fromNullable(error);
-	if (Option.isNone(errorOption)) {
-		return false;
-	}
-
-	const currentError = errorOption.value as {
-		Code?: unknown;
-		name?: unknown;
-		$metadata?: unknown;
-	};
-
-	if (currentError.Code === "NotModified" || currentError.name === "NotModified") {
-		return true;
-	}
-
-	if (typeof currentError.$metadata !== "object") {
-		return false;
-	}
-
-	const metadataOption = Option.fromNullable(currentError.$metadata);
-	if (Option.isNone(metadataOption)) {
-		return false;
-	}
-
-	return (metadataOption.value as { httpStatusCode?: number }).httpStatusCode === 304;
+	return Option.exists(Option.fromNullishOr(error as S3ErrorShape), (current) => {
+		const status = current.$metadata?.httpStatusCode;
+		const statusMatches = typeof status === "number" && kind.statuses.includes(status);
+		return (
+			statusMatches ||
+			[current._tag, current.Code, current.name].some(
+				(value) => typeof value === "string" && kind.names.includes(value),
+			)
+		);
+	});
 };
 
-const isMissingObjectError = (error: unknown): boolean => {
-	if (typeof error !== "object") {
-		return false;
-	}
-
-	const errorOption = Option.fromNullable(error);
-	if (Option.isNone(errorOption)) {
-		return false;
-	}
-
-	const currentError = errorOption.value as { Code?: unknown; name?: unknown };
-	return currentError.name === "NoSuchKey" || currentError.name === "NotFound"
-		? true
-		: currentError.Code === "NoSuchKey";
-};
+const toDefect = (action: string, key: string, error: unknown): Error =>
+	error instanceof Error
+		? error
+		: new Error(
+				`Failed to ${action} ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
+			);
 
 const getEtag = (result: { ETag?: string }, key: string): Effect.Effect<{ etag: string }> =>
-	Option.fromNullable(result.ETag).pipe(
+	Option.fromNullishOr(result.ETag).pipe(
 		Option.match({
 			onNone: () => Effect.die(new Error(`Expected ETag for ${key}`)),
 			onSome: (etag) => Effect.succeed({ etag }),
 		}),
 	);
 
+type ByteArrayBody = { transformToByteArray: () => Promise<Uint8Array> };
+type WebStreamBody = { transformToWebStream: () => ReadableStream<Uint8Array> };
+
 const readBodyBytes = (body: unknown, key: string): Effect.Effect<Uint8Array> => {
 	if (body instanceof Uint8Array) {
 		return Effect.succeed(body);
 	}
 
-	if (typeof body === "object") {
-		const bodyOption = Option.fromNullable(body);
-		if (
-			Option.isSome(bodyOption) &&
-			"transformToByteArray" in bodyOption.value &&
-			typeof bodyOption.value.transformToByteArray === "function"
-		) {
-			const currentBody = bodyOption.value as {
-				transformToByteArray: () => Promise<Uint8Array>;
-			};
-			return Effect.promise(() => currentBody.transformToByteArray()).pipe(Effect.orDie);
-		}
+	if (Predicate.hasProperty(body, "transformToByteArray")) {
+		return Effect.promise(() => (body as ByteArrayBody).transformToByteArray());
 	}
 
 	return Effect.die(new Error(`Expected readable body for ${key}`));
@@ -89,48 +80,27 @@ const readBodyBytes = (body: unknown, key: string): Effect.Effect<Uint8Array> =>
 
 const readBodyStream = (body: unknown, key: string): Effect.Effect<Stream.Stream<Uint8Array>> => {
 	if (body instanceof Uint8Array) {
-		return Effect.succeed(Stream.fromIterable([body]));
+		return Effect.succeed(Stream.make(body));
 	}
 
-	if (body instanceof ReadableStream) {
+	const webStream =
+		body instanceof ReadableStream
+			? Option.some(() => body as ReadableStream<Uint8Array>)
+			: Predicate.hasProperty(body, "transformToWebStream")
+				? Option.some(() => (body as WebStreamBody).transformToWebStream())
+				: Option.none<() => ReadableStream<Uint8Array>>();
+
+	if (Option.isSome(webStream)) {
 		return Effect.succeed(
-			Stream.fromReadableStream<Uint8Array, Error>(
-				() => body as ReadableStream<Uint8Array>,
-				() => new Error(`Failed to stream ${key}`),
-			).pipe(Stream.orDie),
+			Stream.fromReadableStream({
+				evaluate: webStream.value,
+				onError: () => new Error(`Failed to stream ${key}`),
+			}).pipe(Stream.orDie),
 		);
 	}
 
-	if (typeof body === "object") {
-		const bodyOption = Option.fromNullable(body);
-		if (
-			Option.isSome(bodyOption) &&
-			"transformToWebStream" in bodyOption.value &&
-			typeof bodyOption.value.transformToWebStream === "function"
-		) {
-			const currentBody = bodyOption.value as {
-				transformToWebStream: () => ReadableStream<Uint8Array>;
-			};
-			return Effect.succeed(
-				Stream.fromReadableStream<Uint8Array, Error>(
-					() => currentBody.transformToWebStream(),
-					() => new Error(`Failed to stream ${key}`),
-				).pipe(Stream.orDie),
-			);
-		}
-	}
-
-	if (typeof body === "object") {
-		const bodyOption = Option.fromNullable(body);
-		if (
-			Option.isSome(bodyOption) &&
-			"transformToByteArray" in bodyOption.value &&
-			typeof bodyOption.value.transformToByteArray === "function"
-		) {
-			return readBodyBytes(bodyOption.value, key).pipe(
-				Effect.map((bytes) => Stream.fromIterable([bytes])),
-			);
-		}
+	if (Predicate.hasProperty(body, "transformToByteArray")) {
+		return readBodyBytes(body, key).pipe(Effect.map((bytes) => Stream.make(bytes)));
 	}
 
 	return Effect.die(new Error(`Expected streamable body for ${key}`));
@@ -155,336 +125,241 @@ export const makeS3KV = (bucket: string) =>
 		const s3 = yield* S3;
 
 		yield* s3.headBucket({ Bucket: bucket }).pipe(
-			Effect.catchTag("NotFound", () =>
-				Effect.fail(
-					new BucketDoesNotExistError({
-						bucket,
-						message: `Bucket "${bucket}" does not exist`,
-					}),
-				),
+			Effect.catch((error) =>
+				isS3Error(error, missingBucket)
+					? Effect.fail(
+							new BucketDoesNotExistError({
+								bucket,
+								message: `Bucket "${bucket}" does not exist`,
+							}),
+						)
+					: Effect.die(toDefect("access bucket", bucket, error)),
 			),
 		);
 
+		const getObject = (key: string, ifNoneMatch: Option.Option<string>) =>
+			s3
+				.getObject({
+					Bucket: bucket,
+					Key: key,
+					...Option.match(ifNoneMatch, {
+						onNone: () => ({}),
+						onSome: (etag) => ({ IfNoneMatch: etag }),
+					}),
+				})
+				.pipe(
+					Effect.map(Option.some),
+					Effect.catch((error) =>
+						isS3Error(error, missingObject) ||
+						(Option.isSome(ifNoneMatch) && isS3Error(error, notModified))
+							? Effect.succeed(Option.none())
+							: Effect.die(toDefect("read", key, error)),
+					),
+				);
+
+		const readValue = (key: string, ifNoneMatch: Option.Option<string>) =>
+			Effect.gen(function* () {
+				const response = yield* getObject(key, ifNoneMatch);
+				if (Option.isNone(response)) {
+					return Option.none<{ value: Uint8Array; etag: string }>();
+				}
+
+				const { etag } = yield* getEtag(response.value, key);
+				const value = yield* readBodyBytes(response.value.Body, key);
+				return Option.some({ etag, value });
+			});
+
+		const conditionalPut = (
+			key: string,
+			value: Uint8Array,
+			condition: { readonly IfMatch: string } | { readonly IfNoneMatch: "*" },
+		) =>
+			s3.putObject({ Body: value, Bucket: bucket, Key: key, ...condition }).pipe(
+				Effect.catch((error) =>
+					// `If-Match` on a missing key answers 404; the expected version is gone either way.
+					isS3Error(error, conditionalConflict) ||
+					("IfMatch" in condition && isS3Error(error, missingObject))
+						? Effect.fail(new ConflictError({ key }))
+						: Effect.die(toDefect("write", key, error)),
+				),
+				Effect.flatMap((result) => getEtag(result, key)),
+			);
+
 		return {
 			get: (key) =>
-				Effect.gen(function* () {
-					yield* Effect.logDebug(`s3KV.get(${key})`);
-
-					const response = yield* Effect.either(
-						s3.getObject({ Bucket: bucket, Key: key }),
-					);
-					if (response._tag === "Left") {
-						if (isMissingObjectError(response.left)) {
-							yield* Effect.logDebug(`s3KV.get(${key}) => None`);
-							return Option.none();
-						}
-
-						return yield* Effect.die(
-							response.left instanceof Error
-								? response.left
-								: new Error(
-										`Failed to read ${key}: ${typeof response.left === "object" ? JSON.stringify(response.left) : String(response.left)}`,
-									),
-						);
-					}
-
-					const { etag } = yield* getEtag(response.right, key);
-					const value = yield* readBodyBytes(response.right.Body, key);
-					yield* Effect.logDebug(`s3KV.get(${key}) => Some(${etag})`);
-					return Option.some({ etag, value });
-				}),
-			getIfChanged: (key, etag) =>
-				Effect.gen(function* () {
-					yield* Effect.logDebug(`s3KV.getIfChanged(${key}, ${etag})`);
-
-					const response = yield* Effect.either(
-						s3.getObject({ Bucket: bucket, IfNoneMatch: etag, Key: key }),
-					);
-					if (response._tag === "Left") {
-						if (
-							isMissingObjectError(response.left) ||
-							isNotModifiedError(response.left)
-						) {
-							yield* Effect.logDebug(`s3KV.getIfChanged(${key}) => None`);
-							return Option.none();
-						}
-
-						return yield* Effect.die(
-							response.left instanceof Error
-								? response.left
-								: new Error(
-										`Failed to read ${key}: ${typeof response.left === "object" ? JSON.stringify(response.left) : String(response.left)}`,
-									),
-						);
-					}
-
-					const { etag: currentEtag } = yield* getEtag(response.right, key);
-					const value = yield* readBodyBytes(response.right.Body, key);
-					yield* Effect.logDebug(`s3KV.getIfChanged(${key}) => Some(${currentEtag})`);
-					return Option.some({ etag: currentEtag, value });
-				}),
-			exists: (key) =>
-				Effect.gen(function* () {
-					yield* Effect.logDebug(`s3KV.exists(${key})`);
-
-					const response = yield* Effect.either(
-						s3.headObject({ Bucket: bucket, Key: key }),
-					);
-					if (response._tag === "Left") {
-						if (isMissingObjectError(response.left)) {
-							yield* Effect.logDebug(`s3KV.exists(${key}) => false`);
-							return false;
-						}
-
-						return yield* Effect.die(
-							response.left instanceof Error
-								? response.left
-								: new Error(
-										`Failed to stat ${key}: ${typeof response.left === "object" ? JSON.stringify(response.left) : String(response.left)}`,
-									),
-						);
-					}
-
-					yield* Effect.logDebug(`s3KV.exists(${key}) => true`);
-					return true;
-				}),
-			set: (key, value) =>
-				Effect.logDebug(`s3KV.set(${key}, ${value.length} bytes)`).pipe(
-					Effect.flatMap(() => s3.putObject({ Body: value, Bucket: bucket, Key: key })),
-					Effect.orDieWith((error) =>
-						error instanceof Error
-							? error
-							: new Error(
-									`Failed to write ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
-								),
+				readValue(key, Option.none()).pipe(
+					Effect.tap((result) =>
+						Effect.logDebug(`s3KV.get(${key}) => ${Option.isSome(result)}`),
 					),
+				),
+			getIfChanged: (key, etag) =>
+				readValue(key, Option.some(etag)).pipe(
+					Effect.tap((result) =>
+						Effect.logDebug(
+							`s3KV.getIfChanged(${key}, ${etag}) => ${Option.isSome(result)}`,
+						),
+					),
+				),
+			exists: (key) =>
+				s3.headObject({ Bucket: bucket, Key: key }).pipe(
+					Effect.as(true),
+					Effect.catch((error) =>
+						isS3Error(error, missingObject)
+							? Effect.succeed(false)
+							: Effect.die(toDefect("stat", key, error)),
+					),
+					Effect.tap((result) => Effect.logDebug(`s3KV.exists(${key}) => ${result}`)),
+				),
+			set: (key, value) =>
+				s3.putObject({ Body: value, Bucket: bucket, Key: key }).pipe(
+					Effect.catch((error) => Effect.die(toDefect("write", key, error))),
 					Effect.flatMap((result) => getEtag(result, key)),
 					Effect.tap((result) => Effect.logDebug(`s3KV.set(${key}) => ${result.etag}`)),
 				),
 			cas: (key, value, etag) =>
-				Effect.logDebug(`s3KV.cas(${key}, ${value.length} bytes, ${etag})`).pipe(
-					Effect.flatMap(() =>
-						s3.putObject({ Body: value, Bucket: bucket, IfMatch: etag, Key: key }),
-					),
-					Effect.catchAll((error) => {
-						const currentError =
-							typeof error === "object" && Option.isSome(Option.fromNullable(error))
-								? Option.some(
-										error as {
-											Code?: unknown;
-											name?: unknown;
-											$metadata?: unknown;
-										},
-									)
-								: Option.none<{
-										Code?: unknown;
-										name?: unknown;
-										$metadata?: unknown;
-									}>();
-						const metadata =
-							Option.isSome(currentError) &&
-							typeof currentError.value.$metadata === "object" &&
-							Option.isSome(Option.fromNullable(currentError.value.$metadata))
-								? Option.some(
-										currentError.value.$metadata as { httpStatusCode?: number },
-									)
-								: Option.none<{ httpStatusCode?: number }>();
-
-						return Option.isSome(currentError) &&
-							((typeof currentError.value.Code === "string" &&
-								currentError.value.Code === "PreconditionFailed") ||
-								(typeof currentError.value.name === "string" &&
-									currentError.value.name === "PreconditionFailed")) &&
-							Option.exists(
-								metadata,
-								(currentMetadata) => currentMetadata.httpStatusCode === 412,
-							)
-							? Effect.fail(new ConflictError({ key }))
-							: Effect.die(
-									error instanceof Error
-										? error
-										: new Error(
-												`Failed to write ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
-											),
-								);
-					}),
-					Effect.flatMap((result) => getEtag(result, key)),
+				conditionalPut(key, value, { IfMatch: etag }).pipe(
 					Effect.tap((result) => Effect.logDebug(`s3KV.cas(${key}) => ${result.etag}`)),
 				),
-			delete: (key) =>
-				Effect.logDebug(`s3KV.delete(${key})`).pipe(
-					Effect.flatMap(() => s3.deleteObject({ Bucket: bucket, Key: key })),
-					Effect.asVoid,
-					Effect.orDieWith((error) =>
-						error instanceof Error
-							? error
-							: new Error(
-									`Failed to delete ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
-								),
+			create: (key, value) =>
+				conditionalPut(key, value, { IfNoneMatch: "*" }).pipe(
+					Effect.tap((result) =>
+						Effect.logDebug(`s3KV.create(${key}) => ${result.etag}`),
 					),
-					Effect.tap(() => Effect.logDebug(`s3KV.delete(${key}) => void`)),
 				),
+			delete: (key) =>
+				s3.deleteObject({ Bucket: bucket, Key: key }).pipe(
+					Effect.asVoid,
+					Effect.catch((error) => Effect.die(toDefect("delete", key, error))),
+					Effect.tap(() => Effect.logDebug(`s3KV.delete(${key})`)),
+				),
+			list: (prefix) =>
+				Effect.gen(function* () {
+					const objects: ListedObject[] = [];
+					let token = Option.none<string>();
+					do {
+						const page = yield* s3
+							.listObjectsV2({
+								Bucket: bucket,
+								Prefix: prefix,
+								...Option.match(token, {
+									onNone: () => ({}),
+									onSome: (ContinuationToken) => ({ ContinuationToken }),
+								}),
+							})
+							.pipe(
+								Effect.catch((error) =>
+									Effect.die(toDefect("list", prefix, error)),
+								),
+							);
+						for (const object of page.Contents ?? []) {
+							if (object.Key) {
+								objects.push({
+									key: object.Key,
+									lastModified: object.LastModified?.getTime() ?? 0,
+								});
+							}
+						}
+						token = page.IsTruncated
+							? Option.fromNullishOr(page.NextContinuationToken)
+							: Option.none();
+					} while (Option.isSome(token));
+					return objects;
+				}),
 			readStream: (key) =>
 				Effect.gen(function* () {
-					yield* Effect.logDebug(`s3KV.readStream(${key})`);
-
-					const response = yield* Effect.either(
-						s3.getObject({ Bucket: bucket, Key: key }),
-					);
-					if (response._tag === "Left") {
-						if (isMissingObjectError(response.left)) {
-							yield* Effect.logDebug(`s3KV.readStream(${key}) => None`);
-							return Option.none();
-						}
-
-						return yield* Effect.die(
-							response.left instanceof Error
-								? response.left
-								: new Error(
-										`Failed to stream ${key}: ${typeof response.left === "object" ? JSON.stringify(response.left) : String(response.left)}`,
-									),
-						);
+					const response = yield* getObject(key, Option.none());
+					if (Option.isNone(response)) {
+						return Option.none<Stream.Stream<Uint8Array>>();
 					}
 
-					const stream = yield* readBodyStream(response.right.Body, key);
-					yield* Effect.logDebug(`s3KV.readStream(${key}) => Some(stream)`);
-					return Option.some(stream);
+					return Option.some(yield* readBodyStream(response.value.Body, key));
 				}),
 			writeStream: (key, content) =>
 				Effect.gen(function* () {
-					yield* Effect.logDebug(`s3KV.writeStream(${key}, stream)`);
-
 					const multipartUpload = yield* s3
 						.createMultipartUpload({ Bucket: bucket, Key: key })
 						.pipe(
-							Effect.orDieWith((error) =>
-								error instanceof Error
-									? error
-									: new Error(
-											`Failed to start upload ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
-										),
+							Effect.catch((error) =>
+								Effect.die(toDefect("start upload", key, error)),
 							),
 						);
-					const uploadIdOption = Option.fromNullable(multipartUpload.UploadId);
+					const uploadIdOption = Option.fromNullishOr(multipartUpload.UploadId);
 					if (Option.isNone(uploadIdOption)) {
 						return yield* Effect.die(new Error(`Expected UploadId for ${key}`));
 					}
 
 					const uploadId = uploadIdOption.value;
-					const uploadParts = Effect.scoped(
-						Effect.gen(function* () {
-							const pull = yield* Stream.toPull(content);
-							const completedParts: { ETag: string; PartNumber: number }[] = [];
-							let bufferedChunks: Uint8Array[] = [];
-							let bufferedLength = 0;
-							let partNumber = 1;
+					const completedParts: { ETag: string; PartNumber: number }[] = [];
+					let bufferedChunks: Uint8Array[] = [];
+					let bufferedLength = 0;
 
-							const uploadBufferedPart = (force: boolean): Effect.Effect<void> => {
-								if (
-									bufferedLength === 0 ||
-									(!force && bufferedLength < minimumMultipartPartSize)
-								) {
-									return Effect.void;
-								}
+					const uploadBufferedPart = (force: boolean): Effect.Effect<void> => {
+						if (
+							bufferedLength === 0 ||
+							(!force && bufferedLength < minimumMultipartPartSize)
+						) {
+							return Effect.void;
+						}
 
-								const body = combineChunks(bufferedChunks, bufferedLength);
-								bufferedChunks = [];
-								bufferedLength = 0;
+						const body = combineChunks(bufferedChunks, bufferedLength);
+						const partNumber = completedParts.length + 1;
+						bufferedChunks = [];
+						bufferedLength = 0;
 
-								return s3
-									.uploadPart({
-										Body: body,
-										Bucket: bucket,
-										ContentLength: body.length,
-										Key: key,
-										PartNumber: partNumber,
-										UploadId: uploadId,
-									})
-									.pipe(
-										Effect.orDieWith((error) =>
-											error instanceof Error
-												? error
-												: new Error(
-														`Failed to upload part ${String(partNumber)} for ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
-													),
-										),
-										Effect.flatMap((result) =>
-											Option.fromNullable(result.ETag).pipe(
-												Option.match({
-													onNone: () =>
-														Effect.die(
-															new Error(
-																`Expected ETag for ${key} part ${partNumber}`,
-															),
-														),
-													onSome: (etag) =>
-														Effect.sync(() => {
-															completedParts.push({
-																ETag: etag,
-																PartNumber: partNumber,
-															});
-															partNumber += 1;
-														}),
-												}),
-											),
-										),
-									);
-							};
+						return s3
+							.uploadPart({
+								Body: body,
+								Bucket: bucket,
+								ContentLength: body.length,
+								Key: key,
+								PartNumber: partNumber,
+								UploadId: uploadId,
+							})
+							.pipe(
+								Effect.catch((error) =>
+									Effect.die(
+										toDefect(`upload part ${partNumber} of`, key, error),
+									),
+								),
+								Effect.flatMap((result) =>
+									getEtag(result, `${key} part ${partNumber}`),
+								),
+								Effect.flatMap(({ etag }) =>
+									Effect.sync(() =>
+										completedParts.push({ ETag: etag, PartNumber: partNumber }),
+									),
+								),
+								Effect.asVoid,
+							);
+					};
 
-							while (true) {
-								const nextChunk = yield* Effect.either(pull);
-
-								if (nextChunk._tag === "Left") {
-									return yield* uploadBufferedPart(true).pipe(
-										Effect.as(completedParts),
-									);
-								}
-
-								for (const chunk of Chunk.toReadonlyArray(nextChunk.right)) {
-									bufferedChunks.push(chunk);
-									bufferedLength += chunk.length;
-									if (bufferedLength >= minimumMultipartPartSize) {
-										yield* uploadBufferedPart(false);
-									}
-								}
-							}
-						}),
-					).pipe(
-						Effect.catchAllCause((cause) =>
+					yield* Stream.runForEach(content, (chunk) => {
+						bufferedChunks.push(chunk);
+						bufferedLength += chunk.length;
+						return uploadBufferedPart(false);
+					}).pipe(
+						Effect.andThen(Effect.suspend(() => uploadBufferedPart(true))),
+						Effect.onError(() =>
 							s3
 								.abortMultipartUpload({
 									Bucket: bucket,
 									Key: key,
 									UploadId: uploadId,
 								})
-								.pipe(
-									Effect.orDie,
-									Effect.catchAll(() => Effect.void),
-									Effect.zipRight(Effect.failCause(cause)),
-								),
+								.pipe(Effect.ignore),
 						),
 					);
 
-					const completedParts = yield* uploadParts;
-
 					if (completedParts.length === 0) {
+						yield* s3
+							.abortMultipartUpload({ Bucket: bucket, Key: key, UploadId: uploadId })
+							.pipe(Effect.ignore);
 						const emptyResult = yield* s3
 							.putObject({ Body: new Uint8Array(), Bucket: bucket, Key: key })
 							.pipe(
-								Effect.orDieWith((error) =>
-									error instanceof Error
-										? error
-										: new Error(
-												`Failed to upload ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
-											),
-								),
+								Effect.catch((error) => Effect.die(toDefect("upload", key, error))),
 							);
-
-						const emptyEtagResult = yield* getEtag(emptyResult, key);
-						yield* Effect.logDebug(
-							`s3KV.writeStream(${key}) => ${emptyEtagResult.etag}`,
-						);
-						return emptyEtagResult;
+						return yield* getEtag(emptyResult, key);
 					}
 
 					const result = yield* s3
@@ -494,15 +369,7 @@ export const makeS3KV = (bucket: string) =>
 							MultipartUpload: { Parts: completedParts },
 							UploadId: uploadId,
 						})
-						.pipe(
-							Effect.orDieWith((error) =>
-								error instanceof Error
-									? error
-									: new Error(
-											`Failed to upload ${key}: ${typeof error === "object" ? JSON.stringify(error) : String(error)}`,
-										),
-							),
-						);
+						.pipe(Effect.catch((error) => Effect.die(toDefect("upload", key, error))));
 
 					const finalResult = yield* getEtag(result, key);
 					yield* Effect.logDebug(`s3KV.writeStream(${key}) => ${finalResult.etag}`);

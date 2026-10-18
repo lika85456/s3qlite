@@ -1,6 +1,6 @@
-import { FileSystem } from "@effect/platform/FileSystem";
 import { Data, Effect, Option, Stream } from "effect";
 import type { Scope } from "effect";
+import { FileSystem } from "effect/FileSystem";
 
 import { truncate } from "./cdc/truncate";
 import { LocalKV, RemoteKV, dbKey, encodeJson, headKey, snapshotKey } from "./storage";
@@ -69,7 +69,16 @@ export const fromInternal = (
 		);
 		yield* remote.writeStream(snapshotKey(snapshotId), snapshotStream);
 
-		const remoteResult = yield* remote.set(headKey(dbName), encodeJson(head));
+		const remoteResult = yield* remote.create(headKey(dbName), encodeJson(head)).pipe(
+			Effect.catchTag("ConflictError", () =>
+				Effect.fail(
+					new AlreadyExistsError({
+						dbName,
+						message: `Database "${dbName}" already exists`,
+					}),
+				),
+			),
+		);
 
 		yield* local.set(
 			headKey(dbName),

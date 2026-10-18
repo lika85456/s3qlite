@@ -10,7 +10,7 @@ import { LocalKV, RemoteKV } from "../src/storage";
 const schemaSql = "CREATE TABLE items (id TEXT PRIMARY KEY, value TEXT NOT NULL)";
 
 describe("atomic pull on failure", () => {
-	it.scopedLive("local DB unchanged when remote batch download fails", () =>
+	it.live("local DB unchanged when remote batch download fails", () =>
 		Effect.gen(function* () {
 			const dbName = `atomic-${crypto.randomUUID().slice(0, 8)}`;
 			const sharedRemoteKV = yield* makeMemoryKV();
@@ -73,8 +73,8 @@ describe("atomic pull on failure", () => {
 
 			// Inject failure: remote batch readStream returns None
 			failReadStream = true;
-			const pullResult = yield* Effect.either(b.pull());
-			expect(pullResult._tag).toBe("Left");
+			const pullResult = yield* Effect.result(b.pull());
+			expect(pullResult._tag).toBe("Failure");
 
 			// Local DB must be identical to before the failed pull
 			const rowsAfter = yield* Effect.tryPromise(

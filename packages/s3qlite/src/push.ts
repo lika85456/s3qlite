@@ -6,6 +6,7 @@ import { truncate } from "./cdc/truncate";
 import { ConnectionConfig, ConnectionState } from "./contexts";
 import type { ConflictError } from "./kv/kv";
 import { pushFiles } from "./kv/syncFiles";
+import { pruneCdc } from "./owner/heads";
 import {
 	LocalKV,
 	RemoteKV,
@@ -70,6 +71,7 @@ export const push = (): Effect.Effect<
 		yield* pushFiles(pendingBatches.map((pb) => batchKey(pb.batch.id))).pipe(Effect.orDie);
 
 		const newHead: Head = {
+			...localHead.value.head,
 			snapshots: localHead.value.head.snapshots,
 			batches: localHead.value.head.batches.concat(pendingBatches.map((pb) => pb.batch)),
 		};
@@ -92,6 +94,9 @@ export const push = (): Effect.Effect<
 				lastSyncedLocalChangeId,
 			}),
 		);
+
+		// Pushed CDC rows are never read again; without this the table doubles the database size.
+		yield* pruneCdc(tursoConnection.current, lastSyncedLocalChangeId);
 
 		const lastSnapshotId = newHead.snapshots.at(-1)?.id;
 		const lastBatchId = newHead.batches.at(-1)?.id;

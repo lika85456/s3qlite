@@ -1,5 +1,5 @@
 import type { Database } from "@tursodatabase/database";
-import { Data, Effect } from "effect";
+import { Data, Effect, Option } from "effect";
 
 import { CDCChangeType } from "./types";
 import type { CDCRow, CDCValue } from "./types";
@@ -308,7 +308,7 @@ const applySchemaUpdate = (
 							? match[2].slice(1, -1)
 							: match[2];
 			return getTableColumns(database, tableName).pipe(
-				Effect.catchAll(() => Effect.succeed([] as const)),
+				Effect.catch(() => Effect.succeed([] as const)),
 				Effect.flatMap((columns) =>
 					columns.some((column) => column.name === columnName)
 						? Effect.void
@@ -330,7 +330,17 @@ const applyInsert = (
 ): Effect.Effect<void, Error> =>
 	getTableColumns(database, change.tableName).pipe(
 		Effect.flatMap((columns) =>
-			decodeRecord(change.after).pipe(
+			// Turso records an UPDATE of a rowid as DELETE + INSERT, and that INSERT carries the
+			// new row in `before` with `after` NULL, so fall back to `before`.
+			Option.match(Option.fromNullishOr(change.after ?? change.before), {
+				onNone: (): Effect.Effect<readonly CDCValue[], Error> =>
+					Effect.fail(
+						new Error(
+							`Invalid CDC change ${change.changeId}: insert into ${change.tableName} has no row image`,
+						),
+					),
+				onSome: (image) => decodeRecord(image),
+			}).pipe(
 				Effect.flatMap((values) => {
 					const recordColumns = columns.slice(0, values.length);
 					if (recordColumns.length !== values.length) {
@@ -424,10 +434,12 @@ const applyUpdateWithMask = (
 	getTableColumns(database, change.tableName).pipe(
 		Effect.flatMap((columns) =>
 			Effect.all({
-				after: decodeRecord(change.after),
+				// The row is located by its before-image: an UPDATE can change the primary key,
+				// and the after-image would then point at a row that does not exist yet.
+				before: decodeRecord(change.before),
 				updates: decodeRecord(change.updates),
 			}).pipe(
-				Effect.flatMap(({ after, updates }) =>
+				Effect.flatMap(({ before, updates }) =>
 					parseUpdatedColumns(columns, updates).pipe(
 						Effect.flatMap(([changedColumns, changedValues]) => {
 							if (changedColumns.length === 0) {
@@ -461,12 +473,12 @@ const applyUpdateWithMask = (
 								const index = columns.findIndex(
 									(item) => item.name === column.name,
 								);
-								if (index < 0 || index >= after.length) {
+								if (index < 0 || index >= before.length) {
 									throw new Error(
 										`Missing primary key column ${column.name} in CDC update for ${change.tableName}`,
 									);
 								}
-								return after[index];
+								return before[index];
 							});
 							const sql = `UPDATE "${change.tableName.replaceAll('"', '""')}" SET ${changedColumns.map((column) => `"${column.replaceAll('"', '""')}" = ?`).join(", ")} WHERE ${pkColumns.map((column) => `"${column.name.replaceAll('"', '""')}" = ?`).join(" AND ")}`;
 							return Effect.tryPromise({
@@ -541,7 +553,7 @@ export const replayCDC = (
 			catch: (error) => new Error(`Failed to begin CDC transaction: ${String(error)}`),
 		}).pipe(Effect.asVoid);
 
-		const replayResult = yield* Effect.either(
+		const replayResult = yield* Effect.result(
 			Effect.gen(function* () {
 				for (const change of changes) {
 					yield* applyCDC(database, change).pipe(
@@ -563,7 +575,7 @@ export const replayCDC = (
 					);
 				}
 			}).pipe(
-				Effect.zipRight(
+				Effect.andThen(
 					Effect.tryPromise({
 						try: () => database.exec("COMMIT"),
 						catch: (error) =>
@@ -573,12 +585,12 @@ export const replayCDC = (
 			),
 		);
 
-		if (replayResult._tag === "Right") {
+		if (replayResult._tag === "Success") {
 			return;
 		}
 
-		const error = replayResult.left;
-		const rollbackResult = yield* Effect.either(
+		const error = replayResult.failure;
+		const rollbackResult = yield* Effect.result(
 			Effect.tryPromise({
 				try: () => database.exec("ROLLBACK"),
 				catch: (rollbackError) =>
@@ -586,10 +598,10 @@ export const replayCDC = (
 			}).pipe(Effect.asVoid),
 		);
 
-		if (rollbackResult._tag === "Left") {
+		if (rollbackResult._tag === "Failure") {
 			return yield* Effect.fail(
 				new ReplayError({
-					message: `Failed to replay CDC: ${error instanceof Error ? error.message : String(error)}. Rollback failed: ${rollbackResult.left.message}`,
+					message: `Failed to replay CDC: ${error instanceof Error ? error.message : String(error)}. Rollback failed: ${rollbackResult.failure.message}`,
 					cause: error,
 				}),
 			);

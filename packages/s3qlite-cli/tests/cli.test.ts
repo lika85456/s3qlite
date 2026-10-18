@@ -1,5 +1,5 @@
 import { S3 } from "@effect-aws/client-s3";
-import { NodeContext } from "@effect/platform-node";
+import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 import { chmod, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
@@ -7,6 +7,7 @@ import { Readable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
 import { Rustfs, RustfsLive } from "../../s3qlite/tests/utils/rustfs.js";
+import { testTmpPath } from "../../s3qlite/tests/utils/tmp.js";
 import { runCli } from "../src/cli.js";
 import { getAlias } from "../src/config.js";
 
@@ -27,7 +28,7 @@ const run = async (args: readonly string[], stdin = ""): Promise<Result> => {
 	try {
 		await Effect.runPromise(
 			runCli(["node", "s3qlite", ...args], Readable.from([stdin])).pipe(
-				Effect.provide(NodeContext.layer),
+				Effect.provide(NodeServices.layer),
 			),
 		);
 		return { code: 0, stderr: stderr.join("\n"), stdout: stdout.join("\n") };
@@ -43,7 +44,7 @@ const fixture = Effect.acquireRelease(
 	Effect.gen(function* () {
 		const rustfs = yield* Rustfs;
 		const s3 = yield* S3;
-		const root = yield* Effect.tryPromise(() => mkdtemp("/tmp/opencode/s3qlite-cli-"));
+		const root = yield* Effect.tryPromise(() => mkdtemp(testTmpPath("s3qlite-cli-")));
 		const bucket = rustfs.makeBucketName("cli");
 		yield* s3.createBucket({ Bucket: bucket });
 
@@ -72,7 +73,7 @@ const fixture = Effect.acquireRelease(
 
 // oxlint-disable-next-line local-rules/function-minimum-length -- Keeps every integration test scoped to temporary storage.
 const withFixture = <A, E, R>(
-	test: (value: Effect.Effect.Success<typeof fixture>) => Effect.Effect<A, E, R>,
+	test: (value: Effect.Success<typeof fixture>) => Effect.Effect<A, E, R>,
 ) => {
 	const scoped = Effect.scoped(Effect.flatMap(fixture, test));
 	return scoped.pipe(Effect.provide(RustfsLive));
@@ -120,12 +121,12 @@ describe("s3qlite CLI", () => {
 					expect(
 						(yield* Effect.promise(() => run([...globalArgs, "alias", "list"]))).stdout,
 					).toBe("");
-					const reservedName = yield* Effect.either(
+					const reservedName = yield* Effect.result(
 						getAlias(configDirectory, "constructor"),
 					);
 					expect(reservedName).toMatchObject({
-						_tag: "Left",
-						left: { message: 'alias "constructor" not found' },
+						_tag: "Failure",
+						failure: { message: 'alias "constructor" not found' },
 					});
 				}),
 			),
@@ -314,7 +315,7 @@ describe("s3qlite CLI", () => {
 		));
 
 	it("provides command help without reading the default home directory", async () => {
-		const root = await mkdtemp("/tmp/opencode/s3qlite-cli-help-");
+		const root = await mkdtemp(testTmpPath("s3qlite-cli-help-"));
 		await chmod(root, 0o700);
 		try {
 			const result = await run([

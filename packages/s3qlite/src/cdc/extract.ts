@@ -1,6 +1,7 @@
 import type { Database } from "@tursodatabase/database";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
+import { CDCChangeType } from "./types";
 import type { CDCRow } from "./types";
 
 const query = `
@@ -28,12 +29,25 @@ const latestChangeIdQuery = `
 /**
  * Extracts CDC rows from the Turso database after a given change_id exclusively.
  */
+/**
+ * Turso records an UPDATE of a rowid as DELETE + INSERT, and that INSERT carries the new row in
+ * `before` with `after` NULL. Move the image to `after`, where every insert keeps it.
+ */
+const normalizeRow = (row: CDCRow): CDCRow =>
+	row.changeType === CDCChangeType.Insert &&
+	Option.isNone(Option.fromNullishOr(row.after)) &&
+	Option.isSome(Option.fromNullishOr(row.before))
+		? // oxlint-disable-next-line local-rules/no-null-undefined-option -- Insert CDC rows have no previous image.
+			{ ...row, after: row.before as Uint8Array, before: null }
+		: row;
+
 export const extractCDC = (
 	tursoConnection: Database,
 	afterId: number,
 ): Effect.Effect<readonly CDCRow[]> =>
 	Effect.tryPromise(() => tursoConnection.all(query, afterId) as Promise<CDCRow[]>).pipe(
 		Effect.orDie,
+		Effect.map((rows) => rows.map(normalizeRow)),
 		Effect.tap((r) =>
 			Effect.logDebug(
 				`extractCDC: extracted ${r.length} rows after change_id ${afterId}`,

@@ -11,6 +11,12 @@
 - `bun test:ci` - Run all tests with coverage and silent (no watch)
 - `bun test:integration` - Run integration tests in watch mode
 - `bun test:fuzzy` - Run fuzzy/property-based tests in watch mode
+- `bun run test:cluster` (in `packages/s3qlite`) - Multi-process Effect cluster scenarios
+  against local Postgres + RustFS containers (slow, separate vitest config)
+
+Tests must only use local Docker containers. Never run the `apps/example` suite (its `.env`
+targets a real bucket and the suite wipes it); the root `bun test` / `turbo test` include it, so
+run tests per package instead.
 
 ## Linting/Formatting
 
@@ -91,6 +97,12 @@ Code explains "how", comments explain "why". Comment only non-obvious decisions,
 Each feature is self-contained in one folder. Keep files flat unless 10+ files. Tests always in `tests/` subfolder.
 
 ## Effect Ecosystem
+
+The repo develops on Effect v4.0.5 (`@effect/*@4.0.5`); the published peer range of
+`@lika85456/s3qlite` is `effect >=4.0.1 <5` and must keep working on 4.0.1 (see the package
+AGENTS.md). Read the installed
+`effect` sources/d.ts for API names: e.g. `Context.Service` (not `Context.Tag`), `Effect.catch`,
+`Effect.result`/`Result`, `Option.fromNullishOr`, `effect/FileSystem`, `effect/sql`, `effect/cli`.
 
 All business logic uses Effect. Services defined as layers for dependency injection. Use `pipe` for composition. Handle success, failure, and interruption paths explicitly.
 
